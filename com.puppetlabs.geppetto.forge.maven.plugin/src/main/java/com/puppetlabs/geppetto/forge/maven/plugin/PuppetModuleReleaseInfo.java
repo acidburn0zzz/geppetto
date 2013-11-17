@@ -15,14 +15,11 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
-import java.util.Collections;
-import java.util.List;
 
 import com.google.common.base.Charsets;
 import com.google.gson.annotations.Expose;
 import com.puppetlabs.geppetto.forge.model.Entity;
 import com.puppetlabs.geppetto.forge.model.Metadata;
-import com.puppetlabs.geppetto.forge.model.ModuleName;
 
 /**
  * Stores information about a release that cannot be contained in a POM
@@ -71,9 +68,6 @@ public class PuppetModuleReleaseInfo extends Entity {
 	}
 
 	@Expose
-	private ModuleName moduleName;
-
-	@Expose
 	private String changelog;
 
 	@Expose
@@ -84,9 +78,6 @@ public class PuppetModuleReleaseInfo extends Entity {
 
 	@Expose
 	private String readme;
-
-	@Expose
-	private List<String> tags;
 
 	@Expose
 	private Integer downloadCount;
@@ -107,24 +98,8 @@ public class PuppetModuleReleaseInfo extends Entity {
 		return metadata;
 	}
 
-	/**
-	 * We need an extra module name since the one in the metadata cannot be trusted
-	 * and the maven coordinates are lower cased
-	 * 
-	 * @return The name of the module
-	 */
-	public ModuleName getModuleName() {
-		return moduleName;
-	}
-
 	public String getReadme() {
 		return readme;
-	}
-
-	public List<String> getTags() {
-		return tags == null
-				? Collections.<String> emptyList()
-				: Collections.unmodifiableList(tags);
 	}
 
 	/**
@@ -185,15 +160,7 @@ public class PuppetModuleReleaseInfo extends Entity {
 		this.metadata = metadata;
 	}
 
-	public void setModuleName(ModuleName moduleName) {
-		this.moduleName = moduleName;
-	}
-
 	public void setReadme(String readme) {
 		this.readme = readme;
-	}
-
-	public void setTags(List<String> tags) {
-		this.tags = tags;
 	}
 }

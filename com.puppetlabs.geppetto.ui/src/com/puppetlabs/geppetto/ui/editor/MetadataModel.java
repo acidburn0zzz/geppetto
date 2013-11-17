@@ -15,18 +15,16 @@ import static com.puppetlabs.geppetto.common.Strings.trimToNull;
 import static com.puppetlabs.geppetto.forge.Forge.FORGE;
 import static com.puppetlabs.geppetto.forge.Forge.MODULEFILE_NAME;
 import static com.puppetlabs.geppetto.forge.Forge.PARSE_FAILURE;
+import static java.lang.Math.min;
 
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.codehaus.jackson.JsonFactory;
-import org.codehaus.jackson.JsonGenerator;
-import org.codehaus.jackson.map.ObjectMapper;
 import org.eclipse.core.runtime.IPath;
 import org.eclipse.jface.text.BadLocationException;
 import org.eclipse.jface.text.IDocument;
@@ -37,10 +35,10 @@ import org.jrubyparser.ast.RootNode;
 import org.jrubyparser.lexer.SyntaxException;
 import org.jrubyparser.parser.ParserConfiguration;
 
-import com.google.common.io.CharStreams;
 import com.puppetlabs.geppetto.diagnostic.Diagnostic;
 import com.puppetlabs.geppetto.diagnostic.ExceptionDiagnostic;
 import com.puppetlabs.geppetto.diagnostic.FileDiagnostic;
+import com.puppetlabs.geppetto.forge.client.GsonModule;
 import com.puppetlabs.geppetto.forge.model.ModuleName;
 import com.puppetlabs.geppetto.forge.model.ModuleName.BadNameCharactersException;
 import com.puppetlabs.geppetto.forge.util.CallSymbol;
@@ -51,7 +49,7 @@ import com.puppetlabs.geppetto.pp.dsl.ui.builder.PPModuleMetadataBuilder;
 import com.puppetlabs.geppetto.semver.VersionRange;
 import com.puppetlabs.geppetto.ui.UIPlugin;
 
-public class MetadataModel {
+public class MetadataModel implements ModelDocument {
 	public interface Dependency {
 		void delete();
 
@@ -68,7 +66,7 @@ public class MetadataModel {
 		void setResolved(boolean flag);
 	}
 
-	class JsonDependency extends JsonObject implements Dependency {
+	private class JsonDependency extends JsonObject implements Dependency {
 		private boolean resolved;
 
 		JsonDependency(ArgSticker depObj) {
@@ -94,7 +92,7 @@ public class MetadataModel {
 		}
 
 		public void setNameAndVersion(String moduleName, String versionRequirement) {
-			Map<String, Object> map = getMap();
+			Map<String, Object> map = new LinkedHashMap<String, Object>(getMap());
 			if(moduleName == null)
 				map.remove(NAME);
 			else
@@ -103,7 +101,7 @@ public class MetadataModel {
 				map.remove(VERSION_REQUIREMENT);
 			else
 				map.put(VERSION_REQUIREMENT, versionRequirement);
-			updateJson(4);
+			updateJson(map);
 		}
 
 		public void setResolved(boolean flag) {
@@ -111,20 +109,33 @@ public class MetadataModel {
 		}
 	}
 
-	abstract class JsonObject {
-		private ArgSticker object;
+	private static class JSonInsertDecorator {
+		int offset;
+
+		int length;
+
+		String prefix;
+
+		String suffix;
+
+		int getInjectLength(int totInjectLen) {
+			return totInjectLen - (prefix.length() + suffix.length());
+		}
+
+		int getInjectOffset() {
+			return offset + prefix.length();
+		}
+	}
+
+	private abstract class JsonObject {
+		private final ArgSticker object;
 
 		JsonObject(ArgSticker object) {
 			this.object = object;
 		}
 
 		public void delete() {
-			try {
-				MetadataModel.this.remove(object);
-			}
-			catch(BadLocationException e) {
-				throw new RuntimeException(e);
-			}
+			MetadataModel.this.remove(object);
 		}
 
 		public int getLine() {
@@ -171,30 +182,75 @@ public class MetadataModel {
 			}
 		}
 
-		void updateJson(int indent) {
-			MetadataModel.this.updateJson(object, indent);
+		void updateJson(Map<String, Object> map) {
+			MetadataModel.this.updateJson(object, map, 4);
 		}
 	}
 
-	static class Replacement {
-		int offset;
+	private class JsonOsSupport extends JsonObject implements OsSupport {
+		private boolean resolved;
 
-		int length;
-
-		String prefix;
-
-		String suffix;
-
-		int getInjectLength(int totInjectLen) {
-			return totInjectLen - (prefix.length() + suffix.length());
+		JsonOsSupport(ArgSticker osSupportObj) {
+			super(osSupportObj);
 		}
 
-		int getInjectOffset() {
-			return offset + prefix.length();
+		@Override
+		public void delete() {
+			super.delete();
+			removeFromArray(osSupportCall);
+		}
+
+		public String getName() {
+			return getString(OPERATINGSYSTEM);
+		}
+
+		@SuppressWarnings("unchecked")
+		public List<String> getReleases() {
+			Object value = getMap().get(OPERATINGSYSTEMRELEASE);
+			return value instanceof List<?>
+					? (List<String>) value
+					: Collections.<String> emptyList();
+		}
+
+		public boolean isResolved() {
+			return resolved;
+		}
+
+		public void setNameAndReleases(String name, List<String> releases) {
+			Map<String, Object> map = new LinkedHashMap<String, Object>(getMap());
+			if(name == null)
+				map.remove(OPERATINGSYSTEM);
+			else
+				map.put(OPERATINGSYSTEM, name);
+			if(releases == null || releases.isEmpty())
+				map.remove(OPERATINGSYSTEMRELEASE);
+			else
+				map.put(OPERATINGSYSTEMRELEASE, releases);
+			updateJson(map);
+		}
+
+		public void setResolved(boolean flag) {
+			resolved = flag;
 		}
 	}
 
-	class RubyDependency implements Dependency {
+	public interface OsSupport {
+		void delete();
+
+		int getLine();
+
+		String getName();
+
+		List<String> getReleases();
+
+		boolean isResolved();
+
+		void setNameAndReleases(String moduleName, List<String> releases);
+
+		void setResolved(boolean flag);
+	}
+
+	private class RubyDependency implements Dependency {
 		private CallSticker dependencyCall;
 
 		private boolean resolved;
@@ -237,9 +293,69 @@ public class MetadataModel {
 		}
 	}
 
+	private class RubyOsSupport implements OsSupport {
+		private CallSticker osSupportCall;
+
+		private boolean resolved;
+
+		RubyOsSupport(CallSticker osSupport) {
+			this.osSupportCall = osSupport;
+		}
+
+		public void delete() {
+			setArgValue(CallSymbol.operatingsystem_support, osSupportCall);
+		}
+
+		public int getLine() {
+			try {
+				return document.getLineOfOffset(osSupportCall.getOffset()) + 1;
+			}
+			catch(BadLocationException e) {
+				return -1;
+			}
+		}
+
+		public String getName() {
+			return getArgValue(osSupportCall, 0);
+		}
+
+		public List<String> getReleases() {
+			return getArgValues(osSupportCall, 1);
+		}
+
+		public boolean isResolved() {
+			return resolved;
+		}
+
+		public void setNameAndReleases(String name, List<String> releases) {
+			osSupportCall = setArgValue(CallSymbol.operatingsystem_support, osSupportCall, createArray(name, releases));
+		}
+
+		public void setResolved(boolean flag) {
+			resolved = flag;
+		}
+	}
+
 	private static final String VERSION_REQUIREMENT = "version_requirement";
 
+	private static final String OPERATINGSYSTEM = "operatingsystem";
+
+	private static final String OPERATINGSYSTEMRELEASE = "operatingsystemrelease";
+
 	private static final String NAME = "name";
+
+	private static String[] createArray(String first, List<String> rest) {
+		String[] args;
+		if(rest == null || rest.isEmpty())
+			args = new String[] { first };
+		else {
+			args = new String[rest.size() + 1];
+			args[0] = first;
+			for(int idx = 0; idx < rest.size(); ++idx)
+				args[idx + 1] = rest.get(idx);
+		}
+		return args;
+	}
 
 	public static String getBadNameMessage(IllegalArgumentException e, boolean dependency) {
 		String key;
@@ -275,7 +391,7 @@ public class MetadataModel {
 
 	private CallSticker authorCall;
 
-	private CallSticker descriptionCall;
+	private CallSticker issuesUrlCall;
 
 	private CallSticker dependenciesCall;
 
@@ -285,33 +401,41 @@ public class MetadataModel {
 
 	private CallSticker licenseCall;
 
+	private CallSticker puppetVersionCall;
+
+	private CallSticker tagsCall;
+
+	private CallSticker osSupportCall;
+
 	private ValueSerializer serializer;
 
 	private IDocument document;
 
 	private final List<Dependency> dependencies = new ArrayList<Dependency>();
 
-	private JsonFactory jsonFactory;
+	private final List<OsSupport> osSupports = new ArrayList<OsSupport>();
 
 	private boolean syntaxError;
 
 	private boolean dependencyErrors;
 
-	synchronized void addCall(CallSymbol symbol, CallSticker call) {
+	public synchronized void addCall(CallSymbol symbol, CallSticker call) {
 		switch(symbol) {
 			case author:
 				authorCall = call;
 				break;
 			case dependencies:
-				dependenciesCall = call;
-				for(ArgSticker dep : call.getArguments())
-					dependencies.add(new JsonDependency(dep));
+				if(!isRuby()) {
+					dependenciesCall = call;
+					for(ArgSticker dep : call.getArguments())
+						dependencies.add(new JsonDependency(dep));
+				}
 				break;
 			case dependency:
 				dependencies.add(new RubyDependency(call));
 				break;
-			case description:
-				descriptionCall = call;
+			case issues_url:
+				issuesUrlCall = call;
 				break;
 			case license:
 				licenseCall = call;
@@ -330,6 +454,21 @@ public class MetadataModel {
 				break;
 			case version:
 				versionCall = call;
+				break;
+			case puppet_version:
+				puppetVersionCall = call;
+				break;
+			case tags:
+				tagsCall = call;
+				break;
+			case operatingsystem_support:
+				if(isRuby())
+					osSupports.add(new RubyOsSupport(call));
+				else {
+					osSupportCall = call;
+					for(ArgSticker osSupport : call.getArguments())
+						osSupports.add(new JsonOsSupport(osSupport));
+				}
 		}
 		addPositions(call);
 	}
@@ -367,6 +506,23 @@ public class MetadataModel {
 		dependencies.add(dep);
 	}
 
+	public synchronized void addOsSupport(String name, List<String> releases) {
+		for(OsSupport osSupport : osSupports)
+			if(name.equals(osSupport.getName())) {
+				osSupport.setNameAndReleases(name, releases);
+				return;
+			}
+		OsSupport osSupport;
+		if(isRuby())
+			osSupport = new RubyOsSupport(setArgValue(
+				CallSymbol.operatingsystem_support, null, createArray(name, releases)));
+		else
+			osSupport = createJsonOsSupport(name, releases);
+
+		osSupport.setResolved(isResolved(osSupport));
+		osSupports.add(osSupport);
+	}
+
 	private void addPositions(CallSticker fragment) {
 		try {
 			document.addPosition(fragment);
@@ -379,11 +535,30 @@ public class MetadataModel {
 		}
 	}
 
+	private ArgSticker appendToJsonArray(CallSticker call, Object value, int indent) {
+		int last = getOffsetOfJSonArrayInsert(call);
+		ArgSticker arg = new ArgSticker(last, 0, value);
+		insertJson(arg, indent);
+		ArgSticker[] args = call.getArguments();
+		ArgSticker[] newArgs = new ArgSticker[args.length + 1];
+		System.arraycopy(args, 0, newArgs, 0, args.length);
+		newArgs[args.length] = arg;
+		try {
+			document.addPosition(arg);
+		}
+		catch(BadLocationException e) {
+			throw new RuntimeException(e);
+		}
+		call.setArguments(args);
+		return arg;
+
+	}
+
 	private Map<String, String> createDepsObj(String... values) {
 		if(values.length == 0)
 			return Collections.emptyMap();
 
-		Map<String, String> value = new HashMap<String, String>();
+		Map<String, String> value = new LinkedHashMap<String, String>();
 		String name = emptyToNull(values[0]);
 		if(name != null)
 			value.put(NAME, name);
@@ -397,48 +572,15 @@ public class MetadataModel {
 	}
 
 	private JsonDependency createJsonDependency(String... values) {
-		// Dependencies reside inside of the dependencies array. A new
-		// dependency may potentially need to create this array from
-		// scratch
-		Map<String, String> depsObj = createDepsObj(values);
-		StringBuilder bld = new StringBuilder();
-		if(dependenciesCall == null || dependenciesCall.isDeleted) {
-			Replacement r = prepareJSonInsert(-1, 2);
-			bld.append(r.prefix);
-			try {
-				serializer.serialize(bld, "dependencies");
-				bld.append(": [\n  ]");
-				bld.append(r.suffix);
-				document.replace(r.offset, r.length, bld.toString());
-				dependenciesCall = new CallSticker(
-					r.getInjectOffset(), r.getInjectLength(bld.length()), new ArgSticker[0]);
-				document.addPosition(dependenciesCall);
-			}
-			catch(BadLocationException e) {
-				throw new RuntimeException(e);
-			}
-			catch(IOException e) {
-				throw new RuntimeException(e);
-			}
-			bld.setLength(0);
-		}
+		if(dependenciesCall == null || dependenciesCall.isDeleted)
+			dependenciesCall = prepareJsonArrayValue("dependencies");
+		return new JsonDependency(appendToJsonArray(dependenciesCall, createDepsObj(values), 4));
+	}
 
-		int last = dependenciesCall.getOffset() + dependenciesCall.getLength();
-		String content = document.get();
-		while(last >= 0 && content.charAt(last) != ']')
-			--last;
-		while(--last >= 0 && Character.isWhitespace(content.charAt(last)))
-			;
-		++last;
-
-		ArgSticker arg = new ArgSticker(last, 0, depsObj);
-		updateJson(arg, 4);
-		ArgSticker[] args = dependenciesCall.getArguments();
-		ArgSticker[] newArgs = new ArgSticker[args.length + 1];
-		System.arraycopy(args, 0, newArgs, 0, args.length);
-		newArgs[args.length] = arg;
-		dependenciesCall.setArguments(args);
-		return new JsonDependency(arg);
+	private JsonOsSupport createJsonOsSupport(String name, List<String> releases) {
+		if(osSupportCall == null || osSupportCall.isDeleted)
+			osSupportCall = prepareJsonArrayValue("operatingsystem_support");
+		return new JsonOsSupport(appendToJsonArray(osSupportCall, createOsSupportObj(name, releases), 4));
 	}
 
 	private CallSticker createNewCall(CallSymbol key, String... values) throws IOException, BadLocationException {
@@ -497,7 +639,7 @@ public class MetadataModel {
 	}
 
 	private CallSticker createNewJsonCall(CallSymbol key, String... values) throws IOException, BadLocationException {
-		Replacement r = prepareJSonInsert(-1, 2);
+		JSonInsertDecorator r = prepareJSonInsert(-1, 2);
 
 		StringBuilder bld = new StringBuilder();
 		bld.append(r.prefix);
@@ -533,6 +675,19 @@ public class MetadataModel {
 			r.offset + r.prefix.length(), bld.length() - (r.prefix.length() + r.suffix.length()), argPositions);
 	}
 
+	private Map<String, Object> createOsSupportObj(String name, List<String> releases) {
+		if(name == null && (releases == null || releases.isEmpty()))
+			return Collections.emptyMap();
+
+		Map<String, Object> value = new LinkedHashMap<String, Object>();
+		if(name != null)
+			value.put(OPERATINGSYSTEM, name);
+
+		if(releases != null && !releases.isEmpty())
+			value.put(OPERATINGSYSTEMRELEASE, releases);
+		return value;
+	}
+
 	private String getArgValue(CallSticker call, int argNo) {
 		if(call != null && document != null && !call.isDeleted) {
 			ArgSticker[] args = call.getArguments();
@@ -546,6 +701,27 @@ public class MetadataModel {
 			}
 		}
 		return "";
+	}
+
+	private List<String> getArgValues(CallSticker call, int start) {
+		if(call == null || document == null || call.isDeleted)
+			return Collections.emptyList();
+
+		ArgSticker[] args = call.getArguments();
+		int len = args.length - start;
+		if(len <= 0)
+			return Collections.emptyList();
+
+		List<String> result = new ArrayList<String>(len);
+		for(int argNo = start; argNo < args.length; ++argNo) {
+			ArgSticker fragment = args[argNo];
+			if(!fragment.isDeleted) {
+				Object v = fragment.getValue();
+				if(v != null)
+					result.add(v.toString());
+			}
+		}
+		return result;
 	}
 
 	public String getAuthor() {
@@ -564,12 +740,12 @@ public class MetadataModel {
 		return idx;
 	}
 
-	public String getDescription() {
-		return getArgValue(descriptionCall, 0);
-	}
-
 	IDocument getDocument() {
 		return document;
+	}
+
+	public String getIssuesURL() {
+		return getArgValue(issuesUrlCall, 0);
 	}
 
 	public String getLicense() {
@@ -580,8 +756,26 @@ public class MetadataModel {
 		return getArgValue(nameCall, 0);
 	}
 
+	private int getOffsetOfJSonArrayInsert(CallSticker call) {
+		int last = call.getOffset() + call.getLength();
+		String content = document.get();
+		while(last >= 0 && content.charAt(last) != ']')
+			--last;
+		while(--last >= 0 && Character.isWhitespace(content.charAt(last)))
+			;
+		return ++last;
+	}
+
+	public OsSupport[] getOsSupports() {
+		return osSupports.toArray(new OsSupport[osSupports.size()]);
+	}
+
 	public String getProjectPage() {
 		return getArgValue(projectPageCall, 0);
+	}
+
+	public String getPuppetVersion() {
+		return getArgValue(puppetVersionCall, 0);
 	}
 
 	public String getSource() {
@@ -590,6 +784,10 @@ public class MetadataModel {
 
 	public String getSummary() {
 		return getArgValue(summaryCall, 0);
+	}
+
+	public List<String> getTags() {
+		return getArgValues(tagsCall, 0);
 	}
 
 	public String getVersion() {
@@ -601,6 +799,30 @@ public class MetadataModel {
 	 */
 	public boolean hasDependencyErrors() {
 		return dependencyErrors;
+	}
+
+	private void insertJson(ArgSticker arg, int indent) {
+		if(arg == null || arg.isDeleted)
+			return;
+
+		try {
+			JSonInsertDecorator r = prepareJSonInsert(arg.getOffset(), indent);
+
+			StringBuilder bld = new StringBuilder();
+			bld.append(r.prefix);
+			serializer.serialize(bld, arg.getValue(), indent);
+			bld.append(r.suffix);
+
+			document.replace(r.offset, r.length, bld.toString());
+			arg.setOffset(r.getInjectOffset());
+			arg.setLength(r.getInjectLength(bld.length()));
+		}
+		catch(BadLocationException e) {
+			throw new RuntimeException(e);
+		}
+		catch(IOException e) {
+			throw new RuntimeException(e);
+		}
 	}
 
 	private boolean isResolved(Dependency dep) {
@@ -616,6 +838,11 @@ public class MetadataModel {
 		}
 	}
 
+	private boolean isResolved(OsSupport osSupport) {
+		// TODO
+		return true;
+	}
+
 	private boolean isRuby() {
 		return serializer == RubyValueSerializer.INSTANCE;
 	}
@@ -627,7 +854,28 @@ public class MetadataModel {
 		return syntaxError;
 	}
 
-	private Replacement prepareJSonInsert(int insertPos, final int indent) {
+	private CallSticker prepareJsonArrayValue(String key) {
+		StringBuilder bld = new StringBuilder();
+		JSonInsertDecorator r = prepareJSonInsert(-1, 2);
+		bld.append(r.prefix);
+		try {
+			serializer.serialize(bld, key);
+			bld.append(": [\n  ]");
+			bld.append(r.suffix);
+			document.replace(r.offset, r.length, bld.toString());
+			CallSticker call = new CallSticker(r.getInjectOffset(), r.getInjectLength(bld.length()), new ArgSticker[0]);
+			document.addPosition(call);
+			return call;
+		}
+		catch(BadLocationException e) {
+			throw new RuntimeException(e);
+		}
+		catch(IOException e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	private JSonInsertDecorator prepareJSonInsert(int insertPos, final int indent) {
 		String content = document.get();
 
 		// We should be inserting inside the top json object. It might not even exist at this point
@@ -640,7 +888,7 @@ public class MetadataModel {
 					: content.length();
 
 		StringBuilder bld = new StringBuilder();
-		Replacement replacement = new Replacement();
+		JSonInsertDecorator replacement = new JSonInsertDecorator();
 		if(start >= 0) {
 			if(end < start)
 				replacement.suffix = "\n}";
@@ -671,13 +919,22 @@ public class MetadataModel {
 				++replace;
 			}
 			replacement.offset = ++idx;
-			if(needsComma)
-				bld.append(',');
-			bld.append('\n');
-			idx = indent;
-			while(--idx >= 0)
-				bld.append(' ');
-			replacement.prefix = bld.toString();
+			if(indent < 0) {
+				replacement.prefix = needsComma
+						? ", "
+						: "";
+			}
+			else {
+				if(needsComma)
+					bld.append(',');
+				if(indent >= 0) {
+					bld.append('\n');
+					idx = indent;
+					while(--idx >= 0)
+						bld.append(' ');
+				}
+				replacement.prefix = bld.toString();
+			}
 		}
 		else
 			replacement.offset = insertPos;
@@ -697,24 +954,31 @@ public class MetadataModel {
 				++replace;
 				++idx;
 			}
-			bld.setLength(0);
-			idx = indent;
-			if(needsComma)
-				bld.append(',');
-			else
-				// We are followed by ']' or '}'
-				idx -= 2;
+			if(indent < 0) {
+				replacement.suffix = needsComma
+						? ", "
+						: "";
+			}
+			else {
+				bld.setLength(0);
+				idx = indent;
+				if(needsComma)
+					bld.append(',');
+				else
+					// We are followed by ']' or '}'
+					idx -= 2;
 
-			bld.append('\n');
-			while(--idx >= 0)
-				bld.append(' ');
-			replacement.suffix = bld.toString();
+				bld.append('\n');
+				while(--idx >= 0)
+					bld.append(' ');
+				replacement.suffix = bld.toString();
+			}
 		}
 		replacement.length = replace;
 		return replacement;
 	}
 
-	private void remove(int offset, int len) throws BadLocationException {
+	private void remove(int offset, int len) {
 		String content = document.get();
 		int last = content.length();
 		if(offset > last)
@@ -756,10 +1020,15 @@ public class MetadataModel {
 				++pos;
 			}
 		}
-		document.replace(offset, len, "");
+		try {
+			document.replace(offset, len, "");
+		}
+		catch(BadLocationException e) {
+			throw new RuntimeException(e);
+		}
 	}
 
-	private void remove(Position pos) throws BadLocationException {
+	private void remove(Position pos) {
 		document.removePosition(pos);
 		remove(pos.getOffset(), pos.getLength());
 	}
@@ -767,6 +1036,11 @@ public class MetadataModel {
 	public synchronized void removeDependency(Dependency dep) {
 		if(dependencies.remove(dep))
 			dep.delete();
+	}
+
+	public synchronized void removeOsSupport(OsSupport osSupport) {
+		if(osSupports.remove(osSupport))
+			osSupport.delete();
 	}
 
 	private CallSticker setArgValue(CallSymbol key, CallSticker call, String... values) {
@@ -804,27 +1078,24 @@ public class MetadataModel {
 
 			boolean ruby = isRuby();
 
-			if(!ruby && key == CallSymbol.dependency)
-				// Needs special handling since it's stored as json objects
-				// in an array
-				return updateJsonDependency(call, values);
-
-			// Replace or add arguments to existing call
-			ArgSticker[] newPositions = null;
+			// Replace, add or remove arguments to existing call
 			int nargs = values.length;
-			if(nargs > argPositions.length) {
+			int oldNargs = argPositions.length;
+			ArgSticker[] newPositions = new ArgSticker[nargs];
+			if(nargs != oldNargs) {
 				// Call has additional parameters
 				newPositions = new ArgSticker[nargs];
-				for(idx = 0; idx < argPositions.length; ++idx)
-					newPositions[idx] = argPositions[idx];
+				System.arraycopy(argPositions, 0, newPositions, 0, min(nargs, oldNargs));
 			}
+			else
+				newPositions = argPositions;
 
-			int newArgsLen = 0;
+			int lengthAdjust = 0;
 			for(idx = 0; idx < nargs; ++idx) {
 				String value = values[idx];
-				if(idx < argPositions.length) {
+				if(idx < oldNargs) {
 					// Replace argument content
-					ArgSticker pos = argPositions[idx];
+					ArgSticker pos = newPositions[idx];
 					pos.setValue(value);
 					if(value == null)
 						value = ruby
@@ -836,9 +1107,11 @@ public class MetadataModel {
 						value = bld.toString();
 					}
 					document.replace(pos.getOffset(), pos.getLength(), value);
+					lengthAdjust += value.length() - pos.length;
 					pos.length = value.length();
 				}
 				else {
+					// Add new argument
 					int callEnd = call.getOffset() + call.getLength();
 					String content = document.get();
 					if(callEnd >= content.length())
@@ -857,11 +1130,27 @@ public class MetadataModel {
 					serializer.serialize(bld, value);
 					newPositions[idx] = new ArgSticker(callEnd + argStart, bld.length() - argStart, value);
 					document.replace(callEnd, 0, bld.toString());
-					newArgsLen += bld.length();
+					lengthAdjust += bld.length();
 				}
 			}
-			if(newPositions != null)
-				call = new CallSticker(call.offset, call.length + newArgsLen, newPositions);
+			for(; idx < oldNargs; ++idx) {
+				// Remove argument
+				ArgSticker pos = argPositions[idx];
+				int start = pos.offset;
+				int len = pos.length;
+				if(idx > 0) {
+					// Include length of separator
+					ArgSticker prev = argPositions[idx - 1];
+					int sep = pos.offset - (prev.offset + prev.length);
+					start -= sep;
+					len += sep;
+				}
+				lengthAdjust -= len;
+				document.replace(start, len, "");
+			}
+
+			if(nargs != oldNargs || lengthAdjust != 0)
+				call = new CallSticker(call.offset, call.length + lengthAdjust, newPositions);
 			return call;
 		}
 		catch(BadLocationException e) {
@@ -876,15 +1165,10 @@ public class MetadataModel {
 		authorCall = setArgValue(CallSymbol.author, authorCall, author);
 	}
 
-	public void setDescription(String description) {
-		descriptionCall = setArgValue(CallSymbol.description, descriptionCall, description);
-	}
-
 	synchronized void setDocument(IDocument document, IPath path, Diagnostic chain) {
 		syntaxError = false;
 		dependencyErrors = false;
 		authorCall = null;
-		descriptionCall = null;
 		licenseCall = null;
 		nameCall = null;
 		projectPageCall = null;
@@ -892,6 +1176,7 @@ public class MetadataModel {
 		summaryCall = null;
 		versionCall = null;
 		dependencies.clear();
+		osSupports.clear();
 		this.document = document;
 		if(document != null) {
 			try {
@@ -906,15 +1191,26 @@ public class MetadataModel {
 					new LenientModulefileParser(this).parseRubyAST(root, chain);
 				}
 				else {
-					if(jsonFactory == null) {
-						jsonFactory = new JsonFactory();
+					if(serializer == null) {
 						serializer = new ValueSerializer() {
 							@Override
 							public void serialize(Appendable bld, Object value) throws IOException {
-								JsonGenerator generator = jsonFactory.createJsonGenerator(CharStreams.asWriter(bld));
-								generator.setCodec(new ObjectMapper(jsonFactory));
-								generator.writeObject(value);
-								generator.flush();
+								bld.append(GsonModule.INSTANCE.toJSON(value));
+							}
+
+							@Override
+							public void serialize(Appendable bld, Object value, int indent) throws IOException {
+								String v = GsonModule.INSTANCE.toJSON(value);
+								int top = v.length();
+								for(int idx = 0; idx < top; ++idx) {
+									char c = v.charAt(idx);
+									bld.append(c);
+									if(c == '\n') {
+										int x = indent;
+										while(--x >= 0)
+											bld.append(' ');
+									}
+								}
 							}
 						};
 					}
@@ -945,6 +1241,10 @@ public class MetadataModel {
 		}
 	}
 
+	public void setIssuesURL(String issuesURL) {
+		issuesUrlCall = setArgValue(CallSymbol.issues_url, issuesUrlCall, issuesURL);
+	}
+
 	public void setLicense(String license) {
 		licenseCall = setArgValue(CallSymbol.license, licenseCall, license);
 	}
@@ -957,6 +1257,10 @@ public class MetadataModel {
 		projectPageCall = setArgValue(CallSymbol.project_page, projectPageCall, projectPage);
 	}
 
+	public void setPuppetVersion(String version) {
+		puppetVersionCall = setArgValue(CallSymbol.puppet_version, puppetVersionCall, version);
+	}
+
 	public void setSource(String source) {
 		sourceCall = setArgValue(CallSymbol.source, sourceCall, source);
 	}
@@ -965,25 +1269,45 @@ public class MetadataModel {
 		summaryCall = setArgValue(CallSymbol.summary, summaryCall, summary);
 	}
 
+	public void setTags(List<String> tags) {
+		String tagsArray[] = tags == null
+				? new String[0]
+				: tags.toArray(new String[tags.size()]);
+
+		if(isRuby()) {
+			tagsCall = setArgValue(CallSymbol.tags, tagsCall, tagsArray);
+			return;
+		}
+
+		if(tagsCall == null || tagsCall.isDeleted)
+			tagsCall = prepareJsonArrayValue("tags");
+		ArgSticker[] args = tagsCall.getArguments();
+		int maxUpdate = min(tags.size(), args.length);
+		int idx = 0;
+		for(; idx < maxUpdate; ++idx)
+			updateJson(args[idx], tags.get(idx), -1);
+		for(; idx < tags.size(); ++idx)
+			appendToJsonArray(tagsCall, tags.get(idx), -1);
+		for(; idx < args.length; ++idx)
+			remove(args[idx]);
+	}
+
 	public void setVersion(String version) {
 		versionCall = setArgValue(CallSymbol.version, versionCall, version);
 	}
 
-	private void updateJson(ArgSticker arg, int indent) {
-		if(arg == null || arg.isDeleted)
+	private void updateJson(ArgSticker arg, Object v, int indent) {
+		if(v == null)
+			v = "";
+
+		if(v.equals(arg.getValue()))
 			return;
 
 		try {
-			Replacement r = prepareJSonInsert(arg.getOffset(), indent);
-
 			StringBuilder bld = new StringBuilder();
-			bld.append(r.prefix);
-			serializer.serialize(bld, arg.getValue());
-			bld.append(r.suffix);
-
-			document.replace(r.offset, r.length, bld.toString());
-			arg.setOffset(r.getInjectOffset());
-			arg.setLength(r.getInjectLength(bld.length()));
+			serializer.serialize(bld, v, indent);
+			document.replace(arg.offset, arg.length, bld.toString());
+			arg.setValue(v);
 		}
 		catch(BadLocationException e) {
 			throw new RuntimeException(e);
@@ -991,13 +1315,5 @@ public class MetadataModel {
 		catch(IOException e) {
 			throw new RuntimeException(e);
 		}
-	}
-
-	private CallSticker updateJsonDependency(CallSticker call, String... values) {
-		ArgSticker sticker = new ArgSticker(call.getOffset(), call.getLength(), createDepsObj(values));
-		updateJson(sticker, 4);
-		call.setOffset(sticker.getOffset());
-		call.setLength(sticker.getLength());
-		return call;
 	}
 }

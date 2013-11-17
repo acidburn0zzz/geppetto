@@ -16,6 +16,7 @@ import static com.puppetlabs.geppetto.forge.Forge.PACKAGE;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -126,6 +127,12 @@ public abstract class MetadataJsonParser extends JsonPositionalParser {
 						case dependencies:
 							validateDependencies(args, symbol.name(), chain);
 							break;
+						case operatingsystem_support:
+							validateOsSupport(args, symbol.name(), chain);
+							break;
+						case tags:
+							validateArrayOfString(args, symbol.name(), chain);
+							break;
 						case types:
 							validateTypes(args, symbol.name(), chain);
 							break;
@@ -165,6 +172,17 @@ public abstract class MetadataJsonParser extends JsonPositionalParser {
 		return Collections.emptyList();
 	}
 
+	protected List<String> validateArrayOfString(JElement element, String symbol, Diagnostic chain) {
+		List<JElement> elems = validateArray(element, symbol, chain);
+		if(elems.isEmpty())
+			return Collections.emptyList();
+
+		List<String> result = new ArrayList<String>(elems.size());
+		for(JElement elem : validateArray(element, symbol, chain))
+			result.add(validateString(elem, symbol, chain));
+		return result;
+	}
+
 	private void validateChecksums(JElement args, String name, Diagnostic chain) {
 		// This is derived material. Hardly a need to validate
 	}
@@ -197,6 +215,19 @@ public abstract class MetadataJsonParser extends JsonPositionalParser {
 
 		chain.addChild(createDiagnostic(element, Diagnostic.ERROR, symbol + " must be an object"));
 		return Collections.emptyList();
+	}
+
+	private void validateOsSupport(JElement args, String name, Diagnostic chain) {
+		for(JElement osSupport : validateArray(args, name, chain)) {
+			for(JEntry entry : validateObject(osSupport, name, chain)) {
+				if("operatingsystem".equals(entry.getKey()))
+					validateString(entry.getElement(), entry.getKey(), chain);
+				else if("operatingsystemrelease".equals(entry.getKey()))
+					validateArrayOfString(entry.getElement(), entry.getKey(), chain);
+				else
+					chain.addChild(createDiagnostic(entry, WARNING, "Unrecognized entry: " + entry.getKey()));
+			}
+		}
 	}
 
 	protected String validateString(JElement element, String symbol, Diagnostic chain) {

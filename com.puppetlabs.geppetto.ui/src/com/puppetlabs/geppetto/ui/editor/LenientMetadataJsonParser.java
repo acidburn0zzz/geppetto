@@ -16,7 +16,7 @@ import com.puppetlabs.geppetto.forge.util.CallSymbol;
 import com.puppetlabs.geppetto.forge.util.MetadataJsonParser;
 
 public class LenientMetadataJsonParser extends MetadataJsonParser {
-	private final MetadataModel model;
+	private final ModelDocument model;
 
 	public LenientMetadataJsonParser(MetadataModel model) {
 		this.model = model;

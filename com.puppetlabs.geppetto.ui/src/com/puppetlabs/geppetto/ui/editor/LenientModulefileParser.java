@@ -12,10 +12,11 @@ package com.puppetlabs.geppetto.ui.editor;
 
 import java.util.List;
 
+import org.jrubyparser.SourcePosition;
+
 import com.puppetlabs.geppetto.forge.util.Argument;
 import com.puppetlabs.geppetto.forge.util.CallSymbol;
 import com.puppetlabs.geppetto.forge.util.ModulefileParser;
-import org.jrubyparser.SourcePosition;
 
 public class LenientModulefileParser extends ModulefileParser {
 	private final MetadataModel model;
@@ -46,13 +47,26 @@ public class LenientModulefileParser extends ModulefileParser {
 						}
 						break;
 					}
+					case puppet_version: {
+						String ver = args.get(0).toStringOrNull();
+						if(ver != null)
+							createVersionRange(ver, pos);
+						break;
+					}
 					case dependency:
 						createDependency(args.get(0).toStringOrNull(), null, pos);
 						break;
-					case author:
+					case operatingsystem_support:
+						createOsSupport(args.get(0).toStringOrNull(), null, pos);
+						break;
 					case description:
+						addWarning(pos, "Ignoring description");
+						return;
+					case author:
 					case license:
 					case project_page:
+					case issues_url:
+					case tags:
 					case source:
 					case summary:
 						break;
@@ -71,6 +85,12 @@ public class LenientModulefileParser extends ModulefileParser {
 				}
 				// Fall through
 			default:
+				if(key == CallSymbol.operatingsystem_support) {
+					createOsSupport(args.get(0).toStringOrNull(), getStrings(args.subList(1, args.size())), pos);
+					break;
+				}
+				if(key == CallSymbol.tags)
+					break;
 				noResponse(key.name(), pos, nargs);
 				return;
 		}

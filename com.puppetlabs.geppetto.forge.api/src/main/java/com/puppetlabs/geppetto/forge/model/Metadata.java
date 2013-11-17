@@ -18,11 +18,19 @@ import java.util.Map;
 
 import com.google.gson.annotations.Expose;
 import com.puppetlabs.geppetto.semver.Version;
+import com.puppetlabs.geppetto.semver.VersionRange;
 
 /**
  * Module meta-data
  */
 public class Metadata extends Entity {
+
+	private static <T> List<T> copyList(List<T> src) {
+		return src == null || src.isEmpty()
+				? Collections.<T> emptyList()
+				: new ArrayList<T>(src);
+
+	}
 
 	private static List<Type> copyTypes(List<Type> types) {
 		if(types != null) {
@@ -54,9 +62,6 @@ public class Metadata extends Entity {
 	private List<Dependency> dependencies;
 
 	@Expose
-	private String description;
-
-	@Expose
 	private String license;
 
 	@Expose
@@ -64,6 +69,12 @@ public class Metadata extends Entity {
 
 	@Expose
 	private String project_page;
+
+	@Expose
+	private String issues_url;
+
+	@Expose
+	private VersionRange puppet_version;
 
 	@Expose
 	private String source;
@@ -75,7 +86,13 @@ public class Metadata extends Entity {
 	private List<Type> types;
 
 	@Expose
+	private List<String> tags;
+
+	@Expose
 	private Version version;
+
+	@Expose
+	private List<OsSupport> operatingsystem_support;
 
 	/**
 	 * Creates an empty Metadata instance
@@ -93,21 +110,21 @@ public class Metadata extends Entity {
 	public Metadata(Metadata src) {
 		name = src.name;
 		version = src.version;
+		puppet_version = src.puppet_version;
+
 		summary = nullToEmpty(src.summary);
 		author = nullToEmpty(src.author);
-		description = nullToEmpty(src.description);
 		source = nullToEmpty(src.source);
 		project_page = nullToEmpty(src.project_page);
+		issues_url = nullToEmpty(src.issues_url);
 		license = nullToEmpty(src.license);
 
-		if(src.dependencies == null || src.dependencies.isEmpty())
-			dependencies = Collections.emptyList();
-		else
-			dependencies = new ArrayList<Dependency>(src.dependencies);
-
 		types = copyTypes(src.types);
+		operatingsystem_support = copyList(src.operatingsystem_support);
+		tags = copyList(src.tags);
+		dependencies = copyList(src.dependencies);
 
-		if(checksums == null || checksums.isEmpty())
+		if(src.checksums == null || src.checksums.isEmpty())
 			checksums = Collections.emptyMap();
 		else
 			checksums = new HashMap<String, byte[]>(src.checksums);
@@ -145,12 +162,10 @@ public class Metadata extends Entity {
 	}
 
 	/**
-	 * A description of the module.
-	 * 
-	 * @return the description
+	 * @return the issues_url
 	 */
-	public String getDescription() {
-		return description;
+	public String getIssuesURL() {
+		return issues_url;
 	}
 
 	/**
@@ -181,6 +196,13 @@ public class Metadata extends Entity {
 	}
 
 	/**
+	 * @return the puppet_version
+	 */
+	public VersionRange getPuppetVersion() {
+		return puppet_version;
+	}
+
+	/**
 	 * A URL that points to the source for this module.
 	 * 
 	 * @return the source
@@ -196,6 +218,24 @@ public class Metadata extends Entity {
 	 */
 	public String getSummary() {
 		return summary;
+	}
+
+	/**
+	 * @return the operatingsystem_support
+	 */
+	public List<OsSupport> getSupportedOperatingSystems() {
+		if(operatingsystem_support == null)
+			operatingsystem_support = new ArrayList<OsSupport>();
+		return operatingsystem_support;
+	}
+
+	/**
+	 * @return the tags
+	 */
+	public List<String> getTags() {
+		if(tags == null)
+			tags = new ArrayList<String>();
+		return tags;
 	}
 
 	/**
@@ -243,11 +283,11 @@ public class Metadata extends Entity {
 	}
 
 	/**
-	 * @param description
-	 *            the description to set
+	 * @param issuesURL
+	 *            the issues_url to set
 	 */
-	public void setDescription(String description) {
-		this.description = description;
+	public void setIssuesURL(String issuesURL) {
+		this.issues_url = issuesURL;
 	}
 
 	/**
@@ -275,6 +315,14 @@ public class Metadata extends Entity {
 	}
 
 	/**
+	 * @param puppeVersion
+	 *            the puppet_version to set
+	 */
+	public void setPuppetVersion(VersionRange puppeVersion) {
+		this.puppet_version = puppeVersion;
+	}
+
+	/**
 	 * @param source
 	 *            the source to set
 	 */
@@ -288,6 +336,22 @@ public class Metadata extends Entity {
 	 */
 	public void setSummary(String summary) {
 		this.summary = summary;
+	}
+
+	/**
+	 * @param supportedOperatingSystems
+	 *            the list of supported operating systems to set
+	 */
+	public void setSupportedOperatingSystems(List<OsSupport> supportedOperatingSystems) {
+		this.operatingsystem_support = supportedOperatingSystems;
+	}
+
+	/**
+	 * @param tags
+	 *            the tags to set
+	 */
+	public void setTags(List<String> tags) {
+		this.tags = tags;
 	}
 
 	/**

@@ -15,15 +15,21 @@ import static com.puppetlabs.geppetto.forge.Forge.MODULEFILE_NAME;
 import java.io.File;
 import java.io.IOException;
 
+import com.google.inject.Singleton;
 import com.puppetlabs.geppetto.diagnostic.Diagnostic;
 import com.puppetlabs.geppetto.forge.model.Metadata;
 import com.puppetlabs.geppetto.forge.util.ModuleUtils;
-import com.google.inject.Singleton;
 
+/**
+ * An extractor that creates a Metadata instance from a Modulefile
+ * 
+ * @deprecated Modulefile is no longer used
+ */
+@Deprecated
 @Singleton
 public class ModulefileExtractor extends AbstractMetadataExtractor {
 	public int getCardinal() {
-		return 10;
+		return 30;
 	}
 
 	@Override

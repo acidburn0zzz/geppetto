@@ -16,8 +16,10 @@ import static org.eclipse.xtext.util.Strings.emptyIfNull;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 import org.eclipse.core.resources.IFile;
@@ -27,6 +29,8 @@ import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.emf.common.util.EList;
 import org.eclipse.emf.common.util.UniqueEList;
+import org.eclipse.jface.dialogs.Dialog;
+import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.jface.dialogs.IMessageProvider;
 import org.eclipse.jface.layout.GridDataFactory;
 import org.eclipse.jface.layout.TableColumnLayout;
@@ -44,8 +48,11 @@ import org.eclipse.jface.window.ToolTip;
 import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.ModifyEvent;
+import org.eclipse.swt.events.ModifyListener;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
+import org.eclipse.swt.events.VerifyEvent;
+import org.eclipse.swt.events.VerifyListener;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.Point;
@@ -53,6 +60,7 @@ import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Label;
@@ -66,10 +74,13 @@ import org.eclipse.ui.dialogs.FilteredList;
 import org.eclipse.ui.forms.IManagedForm;
 import org.eclipse.ui.forms.IMessage;
 import org.eclipse.ui.forms.IMessageManager;
+import org.eclipse.ui.forms.widgets.ExpandableComposite;
+import org.eclipse.ui.forms.widgets.Form;
 import org.eclipse.ui.forms.widgets.FormToolkit;
 import org.eclipse.ui.forms.widgets.Section;
 import org.eclipse.xtext.ui.XtextProjectHelper;
 
+import com.puppetlabs.geppetto.common.Strings;
 import com.puppetlabs.geppetto.diagnostic.Diagnostic;
 import com.puppetlabs.geppetto.forge.Forge;
 import com.puppetlabs.geppetto.forge.model.Metadata;
@@ -80,8 +91,10 @@ import com.puppetlabs.geppetto.semver.VersionRange;
 import com.puppetlabs.geppetto.ui.UIPlugin;
 import com.puppetlabs.geppetto.ui.dialog.ModuleListSelectionDialog;
 import com.puppetlabs.geppetto.ui.editor.MetadataModel.Dependency;
+import com.puppetlabs.geppetto.ui.editor.MetadataModel.OsSupport;
 
-class ModuleDependenciesPage extends GuardedModulePage {
+class ModuleRequirementsPage extends GuardedModulePage {
+
 	protected class DependenciesSectionPart extends ModuleSectionPart {
 
 		protected class EditDependencyDialog extends ModuleListSelectionDialog {
@@ -241,11 +254,11 @@ class ModuleDependenciesPage extends GuardedModulePage {
 		private TableViewer tableViewer;
 
 		private DependenciesSectionPart(Composite parent, FormToolkit toolkit) {
-			super(parent, toolkit, Section.DESCRIPTION | Section.NO_TITLE);
+			super(parent, toolkit, Section.TITLE_BAR);
 
 			Section section = getSection();
 
-			section.setDescription(UIPlugin.getLocalString("_UI_Dependencies_description")); //$NON-NLS-1$
+			section.setText(UIPlugin.getLocalString("_UI_Dependencies_title")); //$NON-NLS-1$
 
 			GridDataFactory.swtDefaults().align(SWT.FILL, SWT.FILL).grab(true, true).applyTo(section);
 
@@ -438,7 +451,15 @@ class ModuleDependenciesPage extends GuardedModulePage {
 						if(dialog.open() == Window.OK) {
 							getEditor().getSourcePage().startInternalTextChange();
 							try {
-								dependency.setNameAndVersion(dialog.getName(), dialog.getVersionRequirement());
+								String moduleName = dialog.getName();
+								try {
+									ModuleName m = ModuleName.fromString(moduleName);
+									moduleName = m.toString('/');
+								}
+								catch(IllegalArgumentException e) {
+									// Use name verbatim, even though it is incorrect
+								}
+								dependency.setNameAndVersion(moduleName, dialog.getVersionRequirement());
 							}
 							finally {
 								getEditor().getSourcePage().endInternalTextChange();
@@ -600,6 +621,411 @@ class ModuleDependenciesPage extends GuardedModulePage {
 		}
 	}
 
+	protected class GeneralRequirementsSectionPart extends ModuleSectionPart {
+
+		private Text puppetVersionText;
+
+		protected GeneralRequirementsSectionPart(Composite parent, FormToolkit toolkit) {
+			super(parent, toolkit, ExpandableComposite.TITLE_BAR);
+
+			Section section = getSection();
+
+			section.setText(UIPlugin.getLocalString("_UI_GeneralRequirements_title")); //$NON-NLS-1$
+
+			GridDataFactory.swtDefaults().align(SWT.FILL, SWT.FILL).grab(true, false).applyTo(section);
+			GridDataFactory textGDFactory = GridDataFactory.swtDefaults().align(SWT.FILL, SWT.CENTER).grab(true, false).indent(
+				4, 0);
+
+			Composite client = toolkit.createComposite(section);
+			client.setLayout(new GridLayout(4, false));
+
+			toolkit.createLabel(client, UIPlugin.getLocalString("_UI_PuppetVersion_label")); //$NON-NLS-1$
+
+			puppetVersionText = toolkit.createText(client, null);
+			puppetVersionText.addVerifyListener(versionRangeCharsVerifier);
+			puppetVersionText.addModifyListener(new GuardedModifyListener() {
+				@Override
+				public void handleEvent(ModifyEvent e) {
+					String version = puppetVersionText.getText();
+					validatePuppetVersion(version, puppetVersionText);
+					getModel().setPuppetVersion(version);
+				}
+			});
+
+			// Rest is on a line of their own so they need to span 3 columns
+			textGDFactory = textGDFactory.span(3, 1);
+			textGDFactory.applyTo(puppetVersionText);
+
+			toolkit.paintBordersFor(client);
+			section.setClient(client);
+		}
+
+		@Override
+		public void refresh() {
+			if(puppetVersionText.isDisposed())
+				return;
+			refresh = true;
+			try {
+				MetadataModel model = getModel();
+				String puppetVersion = model.getPuppetVersion();
+				puppetVersionText.setText(emptyIfNull(puppetVersion));
+				if(model.isSyntaxError()) {
+					clearMessage(puppetVersionText);
+					showSyntaxError(true);
+				}
+				else {
+					showSyntaxError(false);
+					validatePuppetVersion(trimToNull(puppetVersion), puppetVersionText);
+				}
+			}
+			finally {
+				refresh = false;
+			}
+			super.refresh();
+		}
+	}
+
+	protected class OsSupportSectionPart extends ModuleSectionPart {
+
+		protected class EditOsSupportDialog extends Dialog {
+			private Text nameText;
+
+			private Text releasesText;
+
+			private String name;
+
+			private List<String> releases;
+
+			public EditOsSupportDialog(Shell parentShell, OsSupport osSupport) {
+				super(parentShell);
+				if(osSupport != null) {
+					name = osSupport.getName();
+					releases = new ArrayList<String>(osSupport.getReleases());
+				}
+			}
+
+			@Override
+			protected void buttonPressed(int buttonId) {
+				if(buttonId != IDialogConstants.OK_ID) {
+					name = null;
+					releases = null;
+				}
+				super.buttonPressed(buttonId);
+			}
+
+			@Override
+			protected void configureShell(Shell shell) {
+				super.configureShell(shell);
+				shell.setText(UIPlugin.getLocalString(name == null && releases == null
+						? "_UI_AddOsSupport_title"
+						: "_UI_EditOsSupport_title"));
+				shell.setMinimumSize(500, 150);
+			}
+
+			@Override
+			protected Control createDialogArea(Composite parent) {
+				Display display = parent.getDisplay();
+				FormToolkit toolkit = new FormToolkit(display);
+
+				Form form = toolkit.createForm(parent);
+				GridDataFactory.swtDefaults().align(SWT.FILL, SWT.FILL).grab(true, true).applyTo(form);
+				Composite composite = form.getBody();
+				composite.setLayout(new GridLayout(2, false));
+
+				toolkit.createLabel(composite, UIPlugin.getLocalString("_UI_OsName_label"));
+				nameText = toolkit.createText(composite, name);
+				nameText.addModifyListener(new ModifyListener() {
+					public void modifyText(ModifyEvent e) {
+						name = Strings.trimToNull(nameText.getText());
+					}
+				});
+				nameText.setToolTipText(UIPlugin.getLocalString("_UI_OsName_tooltip"));
+				GridDataFactory.swtDefaults().align(SWT.FILL, SWT.FILL).grab(true, true).applyTo(nameText);
+
+				toolkit.createLabel(composite, UIPlugin.getLocalString("_UI_OsReleases_label"));
+				releasesText = toolkit.createText(composite, releases == null
+						? null
+						: Strings.concat(releases, ' '));
+				releasesText.addModifyListener(new ModifyListener() {
+					public void modifyText(ModifyEvent e) {
+						String[] rs = releasesText.getText().split("\\s|,");
+						if(releases == null)
+							releases = new ArrayList<String>(rs.length);
+						else
+							releases.clear();
+						for(int idx = 0; idx < rs.length; ++idx) {
+							String r = rs[idx].trim();
+							if(r.length() > 0)
+								releases.add(r);
+						}
+					}
+				});
+				releasesText.setToolTipText(UIPlugin.getLocalString("_UI_OsReleases_tooltip"));
+				GridDataFactory.swtDefaults().align(SWT.FILL, SWT.FILL).grab(true, true).applyTo(releasesText);
+
+				toolkit.paintBordersFor(composite);
+				return composite;
+			}
+
+			String getName() {
+				return name;
+			}
+
+			List<String> getReleases() {
+				return releases;
+			}
+		}
+
+		private TableViewer tableViewer;
+
+		private OsSupportSectionPart(Composite parent, FormToolkit toolkit) {
+			super(parent, toolkit, Section.TITLE_BAR);
+
+			Section section = getSection();
+
+			section.setText(UIPlugin.getLocalString("_UI_OsSupport_title")); //$NON-NLS-1$
+
+			GridDataFactory.swtDefaults().align(SWT.FILL, SWT.FILL).grab(true, true).applyTo(section);
+
+			Composite client = toolkit.createComposite(section);
+			client.setLayout(new GridLayout(2, false));
+			GridDataFactory.swtDefaults().align(SWT.FILL, SWT.FILL).grab(true, true).applyTo(client);
+
+			Composite tableComposite = new Composite(client, SWT.NONE);
+			TableColumnLayout tableColumnLayout = new TableColumnLayout();
+			tableComposite.setLayout(tableColumnLayout);
+			GridData containerLD = new GridData(SWT.FILL, SWT.FILL, true, true);
+
+			// This keeps the table from growing every time the form is reflow()ed
+			containerLD.widthHint = 1;
+
+			tableComposite.setLayoutData(containerLD);
+
+			tableViewer = new TableViewer(tableComposite, SWT.MULTI | SWT.H_SCROLL | SWT.V_SCROLL | SWT.FULL_SELECTION |
+					SWT.BORDER);
+
+			tableViewer.setContentProvider(new IStructuredContentProvider() {
+				public void dispose() {
+					// do nothing
+				}
+
+				public Object[] getElements(Object inputElement) {
+					return ((MetadataModel) inputElement).getOsSupports();
+				}
+
+				public void inputChanged(Viewer viewer, Object oldInput, Object newInput) {
+					clearMessages();
+				}
+			});
+			ColumnViewerToolTipSupport.enableFor(tableViewer, ToolTip.NO_RECREATE);
+
+			TableViewerColumn nameCol = new TableViewerColumn(tableViewer, SWT.NONE);
+			nameCol.getColumn().setText(UIPlugin.getLocalString("_UI_OsName_label"));
+			nameCol.setLabelProvider(new ColumnLabelProvider() {
+				@Override
+				public String getText(Object element) {
+					return ((MetadataModel.OsSupport) element).getName();
+				}
+
+				@Override
+				public Point getToolTipShift(Object object) {
+					return new Point(0, 15);
+				}
+
+				@Override
+				public String getToolTipText(Object element) {
+					return UIPlugin.getLocalString("_UI_OsName_tooltip");
+				}
+			});
+			tableColumnLayout.setColumnData(nameCol.getColumn(), new ColumnWeightData(2));
+
+			TableViewerColumn vrCol = new TableViewerColumn(tableViewer, SWT.NONE);
+			vrCol.getColumn().setText(UIPlugin.getLocalString("_UI_OsReleases_label"));
+			vrCol.setLabelProvider(new ColumnLabelProvider() {
+				@Override
+				public String getText(Object element) {
+					return Strings.concat(((MetadataModel.OsSupport) element).getReleases(), ' ');
+				}
+
+				@Override
+				public Point getToolTipShift(Object object) {
+					return new Point(0, 15);
+				}
+
+				@Override
+				public String getToolTipText(Object element) {
+					return UIPlugin.getLocalString("_UI_OsReleases_tooltip");
+				}
+			});
+			tableColumnLayout.setColumnData(vrCol.getColumn(), new ColumnWeightData(3));
+
+			Table table = tableViewer.getTable();
+			table.setHeaderVisible(true);
+			table.setLinesVisible(true);
+			table.getBorderWidth();
+
+			Composite buttonsComposite = toolkit.createComposite(client);
+			GridLayout gridLayout = new GridLayout(1, false);
+			gridLayout.marginHeight = 0;
+			gridLayout.marginWidth = 0;
+			buttonsComposite.setLayout(gridLayout);
+
+			GridDataFactory.fillDefaults().align(SWT.FILL, SWT.TOP).applyTo(buttonsComposite);
+
+			final Button addButton = toolkit.createButton(
+				buttonsComposite, UIPlugin.getLocalString("_UI_Add_label"), SWT.PUSH); //$NON-NLS-1$
+			final Button editButton = toolkit.createButton(
+				buttonsComposite, UIPlugin.getLocalString("_UI_Edit_label"), SWT.PUSH); //$NON-NLS-1$
+			final Button removeButton = toolkit.createButton(
+				buttonsComposite, UIPlugin.getLocalString("_UI_Remove_label"), SWT.PUSH); //$NON-NLS-1$
+
+			addButton.addSelectionListener(new SelectionAdapter() {
+
+				@Override
+				public void widgetSelected(SelectionEvent se) {
+					if(allowModification()) {
+						EditOsSupportDialog dialog = new EditOsSupportDialog(getEditor().getSite().getShell(), null);
+						if(dialog.open() == Window.OK) {
+							getEditor().getSourcePage().startInternalTextChange();
+							try {
+								getModel().addOsSupport(dialog.getName(), dialog.getReleases());
+							}
+							finally {
+								getEditor().getSourcePage().endInternalTextChange();
+							}
+							refresh();
+						}
+					}
+					else {
+						addButton.setEnabled(false);
+						editButton.setEnabled(false);
+						removeButton.setEnabled(false);
+					}
+				}
+			});
+			addButton.setEnabled(getEditor().getSourcePage().isEditable());
+
+			GridDataFactory.fillDefaults().align(SWT.FILL, SWT.TOP).applyTo(addButton);
+
+			editButton.addSelectionListener(new SelectionAdapter() {
+
+				@Override
+				public void widgetSelected(SelectionEvent se) {
+					if(allowModification()) {
+						MetadataModel.OsSupport osSupport = (MetadataModel.OsSupport) ((IStructuredSelection) tableViewer.getSelection()).getFirstElement();
+						EditOsSupportDialog dialog = new EditOsSupportDialog(
+							getEditor().getSite().getShell(), osSupport);
+
+						if(dialog.open() == Window.OK) {
+							getEditor().getSourcePage().startInternalTextChange();
+							try {
+								osSupport.setNameAndReleases(dialog.getName(), dialog.getReleases());
+							}
+							finally {
+								getEditor().getSourcePage().endInternalTextChange();
+							}
+							refresh();
+						}
+					}
+					else {
+						addButton.setEnabled(false);
+						editButton.setEnabled(false);
+						removeButton.setEnabled(false);
+					}
+				}
+			});
+			editButton.setEnabled(false);
+
+			GridDataFactory.fillDefaults().align(SWT.FILL, SWT.CENTER).applyTo(editButton);
+
+			removeButton.addSelectionListener(new SelectionAdapter() {
+				@Override
+				public void widgetSelected(SelectionEvent se) {
+					if(allowModification()) {
+						getEditor().getSourcePage().startInternalTextChange();
+						try {
+							@SuppressWarnings("unchecked")
+							Iterator<MetadataModel.Dependency> selections = ((IStructuredSelection) tableViewer.getSelection()).iterator();
+							while(selections.hasNext())
+								getModel().removeDependency(selections.next());
+						}
+						finally {
+							getEditor().getSourcePage().endInternalTextChange();
+						}
+						refresh();
+					}
+					else {
+						addButton.setEnabled(false);
+						editButton.setEnabled(false);
+						removeButton.setEnabled(false);
+					}
+				}
+			});
+			removeButton.setEnabled(false);
+
+			GridDataFactory.fillDefaults().align(SWT.FILL, SWT.BOTTOM).applyTo(removeButton);
+
+			tableViewer.addSelectionChangedListener(new ISelectionChangedListener() {
+				public void selectionChanged(SelectionChangedEvent sce) {
+					IStructuredSelection selection = (IStructuredSelection) sce.getSelection();
+					if(getEditor().getSourcePage().isEditable()) {
+						editButton.setEnabled(selection.size() == 1);
+						removeButton.setEnabled(selection.size() > 0);
+					}
+					else {
+						addButton.setEnabled(false);
+						editButton.setEnabled(false);
+						removeButton.setEnabled(false);
+					}
+				}
+			});
+			section.setClient(client);
+		}
+
+		int getRowNumber(Object element) {
+			return ((MetadataModel) tableViewer.getInput()).getDependencyIndex((Dependency) element);
+		}
+
+		@Override
+		public void refresh() {
+			refresh = true;
+			try {
+				clearMessages();
+				MetadataModel model = getModel();
+				tableViewer.setInput(model);
+				showSyntaxError(model.isSyntaxError());
+				super.refresh();
+			}
+			finally {
+				refresh = false;
+			}
+		}
+	}
+
+	private VerifyListener versionRangeCharsVerifier = new ValidateInputListener() {
+		@Override
+		public void verifyText(VerifyEvent ev) {
+			super.verifyText(ev);
+			if(ev.doit) {
+				char c = ev.character;
+				// @fmtOff
+				ev.doit =
+					   c <= 0x20
+					|| c == '_'
+					|| c == '-'
+					|| c == '.'
+					|| c == '>'
+					|| c == '<'
+					|| c == '='
+					|| c == '~'
+					|| c >= '0' && c <= '9'
+					|| c >= 'a' && c <= 'z'
+					|| c >= 'A' && c <= 'Z';
+				// @fmtOn
+			}
+		}
+	};
+
 	private static final IStatus OK_WITHOUT_TEXT = new Status(
 		IStatus.OK, UIPlugin.getInstance().getSymbolicName(), "", null);
 
@@ -622,7 +1048,7 @@ class ModuleDependenciesPage extends GuardedModulePage {
 
 	private Image warning;
 
-	public ModuleDependenciesPage(ModuleMetadataEditor editor, String id, String title) {
+	public ModuleRequirementsPage(ModuleMetadataEditor editor, String id, String title) {
 		super(editor, id, title);
 	}
 
@@ -632,11 +1058,11 @@ class ModuleDependenciesPage extends GuardedModulePage {
 		String formTitle;
 		IFile file = getEditor().getFile();
 		if(MODULEFILE_NAME.equals(file.getName()))
-			formTitle = "_UI_Modulefile_Dependencies_title";
+			formTitle = "_UI_Modulefile_Requirements_title";
 		else if(file.isDerived())
-			formTitle = "_UI_Derived_Metadata_Dependencies_title";
+			formTitle = "_UI_Derived_Metadata_Requirements_title";
 		else
-			formTitle = "_UI_Metadata_Dependencies_title";
+			formTitle = "_UI_Metadata_Requirements_title";
 
 		managedForm.getForm().setText(UIPlugin.getLocalString(formTitle));
 
@@ -652,7 +1078,10 @@ class ModuleDependenciesPage extends GuardedModulePage {
 		body.setLayout(new GridLayout(1, true));
 
 		FormToolkit toolkit = managedForm.getToolkit();
+		managedForm.addPart(new GeneralRequirementsSectionPart(body, toolkit));
 		managedForm.addPart(new DependenciesSectionPart(body, toolkit));
+		managedForm.addPart(new OsSupportSectionPart(body, toolkit));
+
 		body.addListener(SWT.Paint, new Listener() {
 			@Override
 			public void handleEvent(Event event) {

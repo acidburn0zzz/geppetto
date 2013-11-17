@@ -21,10 +21,10 @@ import java.io.Writer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.google.inject.Singleton;
 import com.puppetlabs.geppetto.common.os.StreamUtil;
 import com.puppetlabs.geppetto.forge.ERB;
 import com.puppetlabs.geppetto.forge.model.Metadata;
-import com.google.inject.Singleton;
 
 @Singleton
 class ERBImpl implements ERB {
@@ -140,17 +140,19 @@ class ERBImpl implements ERB {
 			dest.write(metadata.getName().getOwner());
 		else if("author".equals(key) && metadata.getAuthor() != null)
 			dest.write(metadata.getAuthor());
-		else if("description".equals(key) && metadata.getDescription() != null)
-			dest.write(metadata.getDescription());
 		else if("license".equals(key) && metadata.getLicense() != null)
 			dest.write(metadata.getLicense());
 		else if("project_page".equals(key) && metadata.getProjectPage() != null)
 			dest.write(metadata.getProjectPage());
+		else if("issues_url".equals(key) && metadata.getIssuesURL() != null)
+			dest.write(metadata.getIssuesURL());
 		else if("source".equals(key) && metadata.getSource() != null)
 			dest.write(metadata.getSource());
 		else if("summary".equals(key) && metadata.getSummary() != null)
 			dest.write(metadata.getSummary());
 		else if("version".equals(key) && metadata.getVersion() != null)
 			dest.write(metadata.getVersion().toString());
+		else if("puppet_version".equals(key) && metadata.getPuppetVersion() != null)
+			dest.write(metadata.getPuppetVersion().toString());
 	}
 }

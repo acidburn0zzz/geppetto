@@ -10,19 +10,23 @@
  */
 package com.puppetlabs.geppetto.forge.util;
 
+import java.util.Collections;
 import java.util.List;
+
+import org.jrubyparser.SourcePosition;
+import org.jrubyparser.ast.RootNode;
 
 import com.puppetlabs.geppetto.diagnostic.Diagnostic;
 import com.puppetlabs.geppetto.forge.model.Metadata;
 import com.puppetlabs.geppetto.forge.model.ModuleName;
 
-import org.jrubyparser.SourcePosition;
-import org.jrubyparser.ast.RootNode;
-
 /**
  * A Modulefile parser that only accepts strict entries and adds them
  * to a Metadata instance
+ * 
+ * @deprecated Modulefile is no longer used
  */
+@Deprecated
 public class StrictModulefileParser extends ModulefileParser {
 
 	private final Metadata md;
@@ -33,6 +37,10 @@ public class StrictModulefileParser extends ModulefileParser {
 
 	private void addDependency(String name, String versionRequirement, SourcePosition pos) {
 		md.getDependencies().add(createDependency(name, versionRequirement, pos));
+	}
+
+	private void addOsSupport(String name, List<String> releases, SourcePosition pos) {
+		md.getSupportedOperatingSystems().add(createOsSupport(name, releases, pos));
 	}
 
 	@Override
@@ -48,8 +56,8 @@ public class StrictModulefileParser extends ModulefileParser {
 					case dependency:
 						addDependency(arg, null, pos);
 						break;
-					case description:
-						md.setDescription(arg);
+					case operatingsystem_support:
+						addOsSupport(arg, null, pos);
 						break;
 					case license:
 						md.setLicense(arg);
@@ -64,15 +72,27 @@ public class StrictModulefileParser extends ModulefileParser {
 					case project_page:
 						md.setProjectPage(arg);
 						break;
+					case issues_url:
+						md.setIssuesURL(arg);
+						break;
 					case source:
 						md.setSource(arg);
 						break;
 					case summary:
 						md.setSummary(arg);
 						break;
+					case tags:
+						md.setTags(Collections.singletonList(arg));
+						break;
+					case puppet_version:
+						md.setPuppetVersion(createVersionRange(arg, pos));
+						break;
 					case version:
 						md.setVersion(createVersion(arg, pos));
 						setVersionSeen();
+						break;
+					case description:
+						addWarning(pos, "Ignoring description");
 						break;
 					case dependencies:
 						noResponse(key.name(), pos, 1);
@@ -88,6 +108,14 @@ public class StrictModulefileParser extends ModulefileParser {
 				}
 				// Fall through
 			default:
+				if(key == CallSymbol.operatingsystem_support) {
+					addOsSupport(args.get(0).toStringOrNull(), getStrings(args.subList(1, args.size())), pos);
+					break;
+				}
+				if(key == CallSymbol.tags) {
+					md.setTags(getStrings(args));
+					break;
+				}
 				noResponse(key.name(), pos, 0);
 		}
 	}

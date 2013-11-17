@@ -15,10 +15,6 @@ import static com.puppetlabs.geppetto.forge.Forge.MODULEFILE_NAME;
 
 import java.util.Iterator;
 
-import com.puppetlabs.geppetto.diagnostic.Diagnostic;
-import com.puppetlabs.geppetto.forge.Forge;
-import com.puppetlabs.geppetto.pp.dsl.ui.PPUiConstants;
-import com.puppetlabs.geppetto.ui.UIPlugin;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IMarker;
 import org.eclipse.core.resources.IResourceChangeEvent;
@@ -47,6 +43,10 @@ import org.eclipse.ui.texteditor.IDocumentProvider;
 import org.eclipse.ui.texteditor.MarkerAnnotation;
 
 import com.google.inject.Inject;
+import com.puppetlabs.geppetto.diagnostic.Diagnostic;
+import com.puppetlabs.geppetto.forge.Forge;
+import com.puppetlabs.geppetto.pp.dsl.ui.PPUiConstants;
+import com.puppetlabs.geppetto.ui.UIPlugin;
 
 public class ModuleMetadataEditor extends FormEditor implements IGotoMarker, IShowEditorInput, IResourceChangeListener {
 
@@ -116,12 +116,11 @@ public class ModuleMetadataEditor extends FormEditor implements IGotoMarker, ISh
 		}
 	}
 
-	@Inject
-	private Forge forge;
+	private final Forge forge;
 
 	private ModuleOverviewPage overviewPage;
 
-	private ModuleDependenciesPage dependenciesPage;
+	private ModuleRequirementsPage requirementsPage;
 
 	private ModuleSourcePage sourcePage;
 
@@ -131,15 +130,20 @@ public class ModuleMetadataEditor extends FormEditor implements IGotoMarker, ISh
 
 	private final MetadataModel model = new MetadataModel();
 
+	@Inject
+	public ModuleMetadataEditor(Forge forge) {
+		this.forge = forge;
+	}
+
 	@Override
 	protected void addPages() {
 		try {
 			overviewPage = new ModuleOverviewPage(this, "overview", UIPlugin.getLocalString("_UI_Overview_title")); //$NON-NLS-1$ //$NON-NLS-2$
 			addPage(overviewPage);
 
-			dependenciesPage = new ModuleDependenciesPage(
-				this, "dependencies", UIPlugin.getLocalString("_UI_Dependencies_title")); //$NON-NLS-1$ //$NON-NLS-2$
-			addPage(dependenciesPage);
+			requirementsPage = new ModuleRequirementsPage(
+				this, "requirements", UIPlugin.getLocalString("_UI_Requirements_title")); //$NON-NLS-1$ //$NON-NLS-2$
+			addPage(requirementsPage);
 
 			sourcePage = new ModuleSourcePage(this);
 			int sourcePageIdx = addPage(sourcePage, getEditorInput());
@@ -166,8 +170,7 @@ public class ModuleMetadataEditor extends FormEditor implements IGotoMarker, ISh
 							return false;
 						}
 					};
-					setPageText(
-						addPage(derivedJSON, metadataInput), UIPlugin.getLocalString("_UI_JSON_Derived_title"));
+					setPageText(addPage(derivedJSON, metadataInput), UIPlugin.getLocalString("_UI_JSON_Derived_title"));
 				}
 			}
 			else
@@ -197,8 +200,8 @@ public class ModuleMetadataEditor extends FormEditor implements IGotoMarker, ISh
 		// do nothing
 	}
 
-	ModuleDependenciesPage getDependenciesPage() {
-		return dependenciesPage;
+	ModuleRequirementsPage getDependenciesPage() {
+		return requirementsPage;
 	}
 
 	IDocument getDocument() {
@@ -282,7 +285,7 @@ public class ModuleMetadataEditor extends FormEditor implements IGotoMarker, ISh
 	void markStale() {
 		stale = true;
 		overviewPage.markStale();
-		dependenciesPage.markStale();
+		requirementsPage.markStale();
 	}
 
 	private void refreshModel() {

@@ -21,6 +21,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.regex.Pattern;
 
 import org.jrubyparser.SourcePosition;
@@ -33,6 +34,7 @@ import com.puppetlabs.geppetto.forge.MetadataExtractor;
 import com.puppetlabs.geppetto.forge.model.Dependency;
 import com.puppetlabs.geppetto.forge.model.Metadata;
 import com.puppetlabs.geppetto.forge.model.ModuleName;
+import com.puppetlabs.geppetto.forge.model.OsSupport;
 import com.puppetlabs.geppetto.semver.Version;
 import com.puppetlabs.geppetto.semver.VersionRange;
 
@@ -237,7 +239,9 @@ public class ModuleUtils {
 	 *             when it is not possible to read the <tt>modulefile</tt>.
 	 * @throws IllegalArgumentException
 	 *             if <tt>result</tt> is <tt>null</tt> and errors are detected in the file.
+	 * @deprecated Modulefile is no longer used
 	 */
+	@Deprecated
 	public static void parseModulefile(File modulefile, Metadata receiver, Diagnostic chain) throws IOException,
 			IllegalArgumentException {
 		StrictModulefileParser parser = new StrictModulefileParser(receiver);
@@ -267,7 +271,9 @@ public class ModuleUtils {
 	 *             when it is not possible to read the <tt>content</tt>.
 	 * @throws IllegalArgumentException
 	 *             if <tt>result</tt> is <tt>null</tt> and errors are detected in the file.
+	 * @deprecated Modulefile is no longer used
 	 */
+	@Deprecated
 	public static void parseModulefile(String id, String content, Metadata receiver, Diagnostic chain)
 			throws IOException, IllegalArgumentException {
 		StrictModulefileParser parser = new StrictModulefileParser(receiver);
@@ -288,7 +294,9 @@ public class ModuleUtils {
 	 * @param out
 	 *            The stream that will receive the Modulefile content
 	 * @throws IOException
+	 * @deprecated Modulefile is no longer used
 	 */
+	@Deprecated
 	public static void printModulefile(Metadata md, PrintWriter out) throws IOException {
 		ModuleName name = md.getName();
 		if(name != null)
@@ -302,18 +310,37 @@ public class ModuleUtils {
 			addKeyValueNode(out, "license", md.getLicense());
 		if(md.getProjectPage() != null)
 			addKeyValueNode(out, "project_page", md.getProjectPage().toString());
+		if(md.getIssuesURL() != null)
+			addKeyValueNode(out, "issues_url", md.getIssuesURL().toString());
+		if(md.getPuppetVersion() != null)
+			addKeyValueNode(out, "puppet_version", md.getPuppetVersion().toString());
+		List<String> tags = md.getTags();
+		if(tags != null && !tags.isEmpty())
+			addKeyValueNode(out, "tags", tags.toArray(new String[tags.size()]));
 		if(md.getSource() != null)
 			addKeyValueNode(out, "source", md.getSource());
 		if(md.getSummary() != null)
 			addKeyValueNode(out, "summary", md.getSummary());
-		if(md.getDescription() != null)
-			addKeyValueNode(out, "description", md.getDescription());
 		for(Dependency dep : md.getDependencies()) {
 			VersionRange ver = dep.getVersionRequirement();
 			if(ver != null)
 				addKeyValueNode(out, "dependency", dep.getName().toString('/'), ver.toString());
 			else
 				addKeyValueNode(out, "dependency", dep.getName().toString('/'));
+		}
+		for(OsSupport osSupport : md.getSupportedOperatingSystems()) {
+			List<String> releases = osSupport.getReleases();
+			int rcnt = releases.size();
+			String[] args;
+			if(rcnt == 0)
+				args = new String[] { osSupport.getName() };
+			else {
+				args = new String[rcnt + 1];
+				args[0] = osSupport.getName();
+				for(int idx = 0; idx < rcnt; ++idx)
+					args[idx + 1] = releases.get(idx);
+			}
+			addKeyValueNode(out, "operatingsystem_support", args);
 		}
 	}
 
@@ -325,7 +352,9 @@ public class ModuleUtils {
 	 * @param moduleFile
 	 *            The file to store to
 	 * @throws IOException
+	 * @deprecated Modulefile is no longer used
 	 */
+	@Deprecated
 	public static void saveAsModulefile(Metadata md, File moduleFile) throws IOException {
 		PrintWriter out = new PrintWriter(moduleFile);
 		try {
@@ -342,7 +371,9 @@ public class ModuleUtils {
 	 * @param metadata
 	 *            The metadata to use as input
 	 * @return The Modulefile content that represents the metadata
+	 * @deprecated Modulefile is no longer used
 	 */
+	@Deprecated
 	public static String toModulefileContent(Metadata metadata) {
 		StringWriter bld = new StringWriter();
 		PrintWriter out = new PrintWriter(bld);

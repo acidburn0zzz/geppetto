@@ -206,6 +206,7 @@ class ForgeImpl implements Forge {
 		if(input == null)
 			throw new FileNotFoundException("Unable to find zipped template for generate");
 
+		saveJSONMetadata(metadata, new File(destination, METADATA_JSON_NAME));
 		ZipInputStream template = new ZipInputStream(input);
 		try {
 			installTemplate(metadata, destination, template);
@@ -318,6 +319,7 @@ class ForgeImpl implements Forge {
 	}
 
 	@Override
+	@Deprecated
 	public Metadata loadModulefile(File moduleFile, Diagnostic diagnostic) throws IOException {
 		Metadata metadata = new Metadata();
 		ModuleUtils.parseModulefile(moduleFile, metadata, diagnostic);
@@ -329,6 +331,7 @@ class ForgeImpl implements Forge {
 	}
 
 	@Override
+	@Deprecated
 	public void saveModulefile(Metadata md, File moduleFile) throws IOException {
 		ModuleUtils.saveAsModulefile(md, moduleFile);
 	}

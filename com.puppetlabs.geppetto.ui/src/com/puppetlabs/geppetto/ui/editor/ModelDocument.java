@@ -7,9 +7,12 @@
  * 
  * Contributors:
  *   Puppet Labs
+ * 
  */
-package com.puppetlabs.geppetto.forge.util;
+package com.puppetlabs.geppetto.ui.editor;
 
-public enum CallSymbol {
-	name, author, description, license, project_page, issues_url, puppet_version, operatingsystem_support, tags, source, summary, version, dependency, dependencies, types, checksums
+import com.puppetlabs.geppetto.forge.util.CallSymbol;
+
+public interface ModelDocument {
+	void addCall(CallSymbol symbol, CallSticker call);
 }

@@ -193,7 +193,9 @@ public interface Forge {
 	 *             when it is not possible to read the <tt>modulefile</tt>.
 	 * @throws IllegalArgumentException
 	 *             if <tt>result</tt> is <tt>null</tt> and errors are detected in the file.
+	 * @deprecated Modulefile is no longer used
 	 */
+	@Deprecated
 	Metadata loadModulefile(File moduleFile, Diagnostic result) throws IOException;
 
 	/**
@@ -215,6 +217,8 @@ public interface Forge {
 	 * @param moduleFile
 	 *            The file to create
 	 * @throws IOException
+	 * @deprecated Modulefile is no longer used
 	 */
+	@Deprecated
 	void saveModulefile(Metadata metadata, File moduleFile) throws IOException;
 }

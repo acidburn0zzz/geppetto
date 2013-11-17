@@ -35,6 +35,7 @@ import com.puppetlabs.geppetto.diagnostic.Diagnostic;
 import com.puppetlabs.geppetto.diagnostic.FileDiagnostic;
 import com.puppetlabs.geppetto.forge.model.Dependency;
 import com.puppetlabs.geppetto.forge.model.ModuleName;
+import com.puppetlabs.geppetto.forge.model.OsSupport;
 import com.puppetlabs.geppetto.semver.Version;
 import com.puppetlabs.geppetto.semver.VersionRange;
 
@@ -44,7 +45,8 @@ import com.puppetlabs.geppetto.semver.VersionRange;
  */
 public abstract class ModulefileParser {
 	private static final String[] validProperties = new String[] {
-			"name", "author", "description", "license", "project_page", "source", "summary", "version", "dependency" };
+			"name", "author", "description", "license", "project_page", "issues_url", "source", "summary", "version",
+			"dependency", "operatingsystem_support", "puppet_version", "tags" };
 
 	private static Argument createArgument(Node n) {
 		SourcePosition p = n.getPosition();
@@ -63,6 +65,19 @@ public abstract class ModulefileParser {
 			default:
 				return null;
 		}
+	}
+
+	public static List<String> getStrings(List<Argument> args) {
+		if(args == null || args.isEmpty())
+			return Collections.emptyList();
+
+		List<String> result = new ArrayList<String>();
+		for(Argument arg : args) {
+			String s = arg.toStringOrNull();
+			if(s != null)
+				result.add(s);
+		}
+		return result;
 	}
 
 	private static boolean isValidCall(String key) {
@@ -139,9 +154,28 @@ public abstract class ModulefileParser {
 		return m;
 	}
 
+	protected OsSupport createOsSupport(String name, List<String> releases, SourcePosition pos) {
+		OsSupport osSupport = new OsSupportWithPosition(
+			pos.getStartOffset(), pos.getEndOffset() - pos.getStartOffset(), pos.getStartLine(),
+			new File(pos.getFile()));
+		osSupport.setName(name);
+		osSupport.setReleases(releases);
+		return osSupport;
+	}
+
 	protected Version createVersion(String version, SourcePosition pos) {
 		try {
 			return Version.fromString(version);
+		}
+		catch(IllegalArgumentException e) {
+			addError(pos, e.getMessage());
+			return null;
+		}
+	}
+
+	protected VersionRange createVersionRange(String versionRange, SourcePosition pos) {
+		try {
+			return VersionRange.fromString(versionRange);
 		}
 		catch(IllegalArgumentException e) {
 			addError(pos, e.getMessage());

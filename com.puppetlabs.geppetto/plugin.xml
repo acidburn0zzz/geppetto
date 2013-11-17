@@ -28,7 +28,7 @@
 		productId="com.puppetlabs.geppetto.ide"> </introProductBinding> </extension> -->
 	<extension point="org.eclipse.ui.newWizards">
 		<primaryWizard id="com.puppetlabs.geppetto.ui.NewManifestWizard" />
-		<primaryWizard id="com.puppetlabs.geppetto.ui.NewModulefileWizard" />
+		<primaryWizard id="com.puppetlabs.geppetto.ui.NewMetadataJSONWizard" />
 		<primaryWizard id="com.puppetlabs.geppetto.ui.NewPuppetProjectWizard" />
 		<primaryWizard
 			id="com.puppetlabs.geppetto.ui.NewPuppetModuleProjectWizard" />

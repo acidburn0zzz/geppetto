@@ -68,7 +68,6 @@ public class MetadataTest extends AbstractForgeTest {
 		assertNotNull(metadata);
 		assertEquals(fixture.getAuthor(), metadata.getAuthor());
 		assertEquals(fixture.getDependencies(), metadata.getDependencies());
-		assertEquals(fixture.getDescription(), metadata.getDescription());
 		assertEquals(fixture.getLicense(), metadata.getLicense());
 		assertEquals(fixture.getName(), metadata.getName());
 		assertEquals(fixture.getProjectPage(), metadata.getProjectPage());
@@ -76,6 +75,10 @@ public class MetadataTest extends AbstractForgeTest {
 		assertEquals(fixture.getSummary(), metadata.getSummary());
 		assertEquals(fixture.getTypes(), metadata.getTypes());
 		assertEquals(fixture.getVersion(), metadata.getVersion());
+		assertEquals(fixture.getIssuesURL(), metadata.getIssuesURL());
+		assertEquals(fixture.getTags(), metadata.getTags());
+		assertEquals(fixture.getSupportedOperatingSystems(), metadata.getSupportedOperatingSystems());
+		assertEquals(fixture.getPuppetVersion(), metadata.getPuppetVersion());
 		assertChecksumsEqual(fixture.getChecksums(), metadata.getChecksums());
 	}
 
@@ -170,7 +173,6 @@ public class MetadataTest extends AbstractForgeTest {
 			Metadata tst = new Metadata();
 			ModuleUtils.parseModulefile(moduleFile, tst, new Diagnostic());
 			assertEquals("Expected 2 dependencies", 2, tst.getDependencies().size());
-			assertEquals("Expected 3 lines of text", 3, countLines(tst.getDescription()));
 			assertEquals("Expected 4 lines of text", 4, countLines(tst.getSummary()));
 			assertEquals("Expected 5 lines of text", 5, countLines(tst.getLicense()));
 		}

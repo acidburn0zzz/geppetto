@@ -16,5 +16,29 @@ import java.io.IOException;
  * Language specific String serialization of objects
  */
 public interface ValueSerializer {
+
+	/**
+	 * Serialize the value onto the given <code>appendable</code>.
+	 * 
+	 * @param appendable
+	 *            The receiver of the serialized value
+	 * @param value
+	 *            The value to serialize
+	 * @throws IOException
+	 */
 	void serialize(Appendable bld, Object value) throws IOException;
+
+	/**
+	 * Serialize the value onto the given <code>appendable</code>. Prefix each new line with <code>indent</code> number
+	 * of spaces.
+	 * 
+	 * @param appendable
+	 *            The receiver of the serialized value
+	 * @param value
+	 *            The value to serialize
+	 * @param indent
+	 *            The number of spaces to indent each new line with
+	 * @throws IOException
+	 */
+	void serialize(Appendable appendable, Object value, int indent) throws IOException;
 }

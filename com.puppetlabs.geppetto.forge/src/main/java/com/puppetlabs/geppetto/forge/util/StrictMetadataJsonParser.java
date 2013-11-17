@@ -19,6 +19,7 @@ import com.puppetlabs.geppetto.forge.model.Dependency;
 import com.puppetlabs.geppetto.forge.model.Metadata;
 import com.puppetlabs.geppetto.forge.model.ModuleName;
 import com.puppetlabs.geppetto.forge.model.NamedTypeItem;
+import com.puppetlabs.geppetto.forge.model.OsSupport;
 import com.puppetlabs.geppetto.forge.model.Type;
 import com.puppetlabs.geppetto.semver.Version;
 import com.puppetlabs.geppetto.semver.VersionRange;
@@ -55,6 +56,9 @@ public class StrictMetadataJsonParser extends MetadataJsonParser {
 	@Override
 	protected void call(CallSymbol key, int line, int offset, int length, List<JElement> args) {
 		switch(key) {
+			case description:
+				// ignore
+				break;
 			case types: {
 				List<Type> types = new ArrayList<Type>(args.size());
 				for(JElement jsonType : args) {
@@ -73,6 +77,26 @@ public class StrictMetadataJsonParser extends MetadataJsonParser {
 						deps.add(dep);
 				}
 				md.setDependencies(deps);
+				break;
+			}
+			case operatingsystem_support: {
+				List<OsSupport> osSupports = new ArrayList<OsSupport>(args.size());
+				for(JElement jsonOsSupport : args) {
+					OsSupport osSupport = createOsSupport(jsonOsSupport);
+					if(osSupport != null)
+						osSupports.add(osSupport);
+				}
+				md.setSupportedOperatingSystems(osSupports);
+				break;
+			}
+			case tags: {
+				List<String> tags = new ArrayList<String>(args.size());
+				for(JElement jsonTag : args) {
+					String tag = jsonTag.toStringOrNull();
+					if(tag != null)
+						tags.add(tag);
+				}
+				md.setTags(tags);
 				break;
 			}
 			case checksums:
@@ -97,8 +121,8 @@ public class StrictMetadataJsonParser extends MetadataJsonParser {
 					case author:
 						md.setAuthor(arg);
 						break;
-					case description:
-						md.setDescription(arg);
+					case puppet_version:
+						md.setPuppetVersion(VersionRange.create(arg));
 						break;
 					case license:
 						md.setLicense(arg);
@@ -108,6 +132,9 @@ public class StrictMetadataJsonParser extends MetadataJsonParser {
 						break;
 					case project_page:
 						md.setProjectPage(arg);
+						break;
+					case issues_url:
+						md.setIssuesURL(arg);
 						break;
 					case source:
 						md.setSource(arg);
@@ -198,6 +225,39 @@ public class StrictMetadataJsonParser extends MetadataJsonParser {
 		for(JElement item : ((JArray) element).getValues())
 			items.add(createNamedTypeItem(item));
 		return items;
+	}
+
+	private OsSupport createOsSupport(JElement jsonItem) {
+		if(!(jsonItem instanceof JObject))
+			return null;
+
+		String operatingsystem = null;
+		List<String> operatingsystemrelease = null;
+		for(JEntry entry : ((JObject) jsonItem).getEntries()) {
+			String key = entry.getKey();
+			if("operatingsystem".equals(key))
+				operatingsystem = entry.getElement().toStringOrNull();
+			else if("operatingsystemrelease".equals(key)) {
+				JElement elem = entry.getElement();
+				if(elem instanceof JArray) {
+					List<JElement> jsonRels = ((JArray) elem).getValues();
+					operatingsystemrelease = new ArrayList<String>(jsonRels.size());
+					for(JElement jsonRel : jsonRels) {
+						String rel = jsonRel.toStringOrNull();
+						if(rel != null)
+							operatingsystemrelease.add(rel);
+					}
+				}
+			}
+		}
+		if(operatingsystem != null) {
+			OsSupport item = new OsSupport();
+			item.setName(operatingsystem);
+			item.setReleases(operatingsystemrelease);
+			return item;
+		}
+		return null;
+
 	}
 
 	private Type createType(JElement jsonType) {

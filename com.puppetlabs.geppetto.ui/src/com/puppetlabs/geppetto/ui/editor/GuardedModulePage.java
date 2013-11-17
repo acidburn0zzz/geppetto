@@ -159,6 +159,23 @@ abstract class GuardedModulePage extends FormPage {
 			return syntaxSeverity;
 		}
 
+		int validatePuppetVersion(String puppetVersion, Control control) {
+			int result = IMessageProvider.NONE;
+			IMessageManager msgManager = getManagedForm().getMessageManager();
+			if(puppetVersion == null)
+				msgManager.removeMessage(DEFAULT_MESSAGE_KEY, control);
+			else
+				try {
+					VersionRange.create(puppetVersion);
+					msgManager.removeMessage(DEFAULT_MESSAGE_KEY, control);
+				}
+				catch(IllegalArgumentException e) {
+					msgManager.addMessage(DEFAULT_MESSAGE_KEY, e.getMessage(), null, IMessageProvider.ERROR, control);
+					result = IMessageProvider.ERROR;
+				}
+			return result;
+		}
+
 		int validateVersion(String version, Control control) {
 			IMessageManager msgManager = getManagedForm().getMessageManager();
 			if(version == null) {

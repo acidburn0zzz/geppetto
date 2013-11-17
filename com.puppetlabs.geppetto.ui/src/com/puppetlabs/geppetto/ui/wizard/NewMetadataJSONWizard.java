@@ -1,25 +1,16 @@
 package com.puppetlabs.geppetto.ui.wizard;
 
 import static com.puppetlabs.geppetto.forge.Forge.METADATA_JSON_NAME;
-import static com.puppetlabs.geppetto.forge.Forge.MODULEFILE_NAME;
 import static com.puppetlabs.geppetto.forge.model.Constants.UTF_8;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.io.PrintStream;
 import java.lang.reflect.InvocationTargetException;
 
-import com.puppetlabs.geppetto.common.os.StreamUtil.OpenBAStream;
-import com.puppetlabs.geppetto.forge.model.ModuleName;
-import com.puppetlabs.geppetto.ui.UIPlugin;
-
 import org.eclipse.core.resources.IFile;
-import org.eclipse.core.resources.IResource;
 import org.eclipse.core.runtime.CoreException;
-import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
-import org.eclipse.core.runtime.Path;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.jface.dialogs.ErrorDialog;
 import org.eclipse.jface.dialogs.MessageDialog;
@@ -38,23 +29,27 @@ import org.eclipse.ui.internal.ide.IDEWorkbenchPlugin;
 import org.eclipse.ui.internal.wizards.newresource.ResourceMessages;
 import org.eclipse.ui.wizards.newresource.BasicNewResourceWizard;
 
+import com.google.inject.Inject;
+import com.puppetlabs.geppetto.forge.model.Metadata;
+import com.puppetlabs.geppetto.ui.UIPlugin;
+
 /**
  * This is a sample new wizard. Its role is to create a new file
  * resource in the provided container. If the container resource
  * (a folder or a project) is selected in the workspace
  * when the wizard is opened, it will accept it as the target
- * container. The wizard creates one file called &quot;Modulefile&quot;.
+ * container. The wizard creates one file called &quot;metadata.json&quot;.
  */
 
-public class NewModulefileWizard extends BasicNewResourceWizard implements INewWizard {
-	public static class NewModulefileWizardPage extends WizardNewFileCreationPage {
+public class NewMetadataJSONWizard extends BasicNewResourceWizard implements INewWizard {
+	class NewMetadataJSONWizardPage extends WizardNewFileCreationPage {
 
-		public NewModulefileWizardPage(IStructuredSelection selection) {
-			super("newPuppetModulefilePage", selection);
-			setTitle("Puppet Modulefile File");
-			setFileName(MODULEFILE_NAME);
+		public NewMetadataJSONWizardPage(IStructuredSelection selection) {
+			super("newPuppetMetadataJSONPage", selection);
+			setTitle("Puppet metadata.json File");
+			setFileName(METADATA_JSON_NAME);
 			setFileExtension("");
-			setDescription("This wizard creates a new Modulefile (meta data for a puppet module).");
+			setDescription("This wizard creates a new metadata.json file (meta data for a puppet module).");
 		}
 
 		@Override
@@ -72,18 +67,8 @@ public class NewModulefileWizard extends BasicNewResourceWizard implements INewW
 			// Cheat by creating content manually here - not really worth the trouble of creating a
 			// model to get these empty strings
 			//
-			IPath path = getContainerFullPath();
-			String folderName = path.lastSegment();
-			String[] split = ModuleName.splitName(folderName);
-			StringBuilder bld = new StringBuilder();
-			bld.append("name '");
-			if(split[0] != null) {
-				bld.append(split[0]);
-				bld.append('-');
-				bld.append(split[1]);
-			}
-			bld.append("'\nversion '0.1.0'\n\nauthor ''\nlicense ''\n");
-			return new ByteArrayInputStream(bld.toString().getBytes(UTF_8));
+			Metadata md = metadataHelper.createInitialMetadata(getContainerFullPath().lastSegment());
+			return new ByteArrayInputStream(md.toString().getBytes(UTF_8));
 		}
 
 		@Override
@@ -94,38 +79,23 @@ public class NewModulefileWizard extends BasicNewResourceWizard implements INewW
 		@Override
 		protected boolean validatePage() {
 			boolean valid = super.validatePage();
-			if(!getFileName().equals(MODULEFILE_NAME)) {
-				setErrorMessage("File name must be '" + MODULEFILE_NAME + '\'');
+			if(!getFileName().equals(METADATA_JSON_NAME)) {
+				setErrorMessage("File name must be '" + METADATA_JSON_NAME + '\'');
 				valid = false;
 			}
 			return valid;
 		}
 	}
 
-	// private ISelection selection;
+	private NewMetadataJSONWizardPage page;
 
-	protected static void ensureMetadataJSONExists(IFile moduleFile, IProgressMonitor monitor) {
-		IFile mdjson = moduleFile.getParent().getFile(Path.fromPortableString(METADATA_JSON_NAME));
-		if(mdjson.exists())
-			return;
-
-		try {
-			OpenBAStream oba = new OpenBAStream();
-			PrintStream ps = new PrintStream(oba);
-			ps.println("{}");
-			ps.close();
-			mdjson.create(oba.getInputStream(), IResource.DERIVED, monitor);
-		}
-		catch(CoreException e) {
-		}
-	}
-
-	private NewModulefileWizardPage page;
+	@Inject
+	protected MetadataHelper metadataHelper;
 
 	/**
 	 * Constructor for NewManifestWizard.
 	 */
-	public NewModulefileWizard() {
+	public NewMetadataJSONWizard() {
 		setNeedsProgressMonitor(true);
 	}
 
@@ -135,7 +105,7 @@ public class NewModulefileWizard extends BasicNewResourceWizard implements INewW
 
 	@Override
 	public void addPages() {
-		page = new NewModulefileWizardPage(selection);
+		page = new NewMetadataJSONWizardPage(selection);
 		addPage(page);
 	}
 
@@ -166,8 +136,6 @@ public class NewModulefileWizard extends BasicNewResourceWizard implements INewW
 						try {
 							IWorkbenchPage page = dw.getActivePage();
 							if(page != null) {
-								// Ensure that the 'metadata.json' file exists prior to opening
-								ensureMetadataJSONExists(file, progressMonitor);
 								IDE.openEditor(page, file, true);
 							}
 						}

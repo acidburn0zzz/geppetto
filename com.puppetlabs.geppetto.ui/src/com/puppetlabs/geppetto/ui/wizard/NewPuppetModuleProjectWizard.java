@@ -10,7 +10,7 @@
  */
 package com.puppetlabs.geppetto.ui.wizard;
 
-import static com.puppetlabs.geppetto.forge.Forge.MODULEFILE_NAME;
+import static com.puppetlabs.geppetto.forge.Forge.METADATA_JSON_NAME;
 
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
@@ -42,11 +42,8 @@ import com.puppetlabs.geppetto.common.os.FileUtils;
 import com.puppetlabs.geppetto.forge.Forge;
 import com.puppetlabs.geppetto.forge.model.Metadata;
 import com.puppetlabs.geppetto.forge.model.ModuleName;
-import com.puppetlabs.geppetto.forge.util.ModuleUtils;
 import com.puppetlabs.geppetto.pp.dsl.ui.builder.PPBuildJob;
 import com.puppetlabs.geppetto.pp.dsl.ui.pptp.PptpTargetProjectHandler;
-import com.puppetlabs.geppetto.pp.dsl.ui.preferences.PPPreferencesHelper;
-import com.puppetlabs.geppetto.semver.Version;
 import com.puppetlabs.geppetto.ui.UIPlugin;
 import com.puppetlabs.geppetto.ui.util.ResourceUtil;
 
@@ -90,7 +87,7 @@ public class NewPuppetModuleProjectWizard extends Wizard implements INewWizard {
 	private PptpTargetProjectHandler pptpHandler;
 
 	@Inject
-	protected PPPreferencesHelper preferenceHelper;
+	private MetadataHelper metadataHelper;
 
 	protected IPath projectLocation;
 
@@ -110,13 +107,6 @@ public class NewPuppetModuleProjectWizard extends Wizard implements INewWizard {
 
 	protected Forge getForge() {
 		return forge;
-	}
-
-	private String getModuleOwner() {
-		String moduleOwner = preferenceHelper.getForgeLogin();
-		if(moduleOwner == null)
-			moduleOwner = ModuleName.safeOwner(System.getProperty("user.name"));
-		return moduleOwner;
 	}
 
 	protected String getProjectCreationPageDescription() {
@@ -139,17 +129,13 @@ public class NewPuppetModuleProjectWizard extends Wizard implements INewWizard {
 
 	protected void initializeProjectContents(IProgressMonitor monitor) throws Exception {
 		SubMonitor submon = SubMonitor.convert(monitor, 100);
-		Metadata metadata = new Metadata();
-		metadata.setName(ModuleName.create(getModuleOwner(), project.getName().toLowerCase(), true));
-		metadata.setVersion(Version.fromString("0.1.0"));
-
+		Metadata metadata = metadataHelper.createInitialMetadata(project.getName());
 		if(ResourceUtil.getFile(project.getFullPath().append("manifests/init.pp")).exists()) { //$NON-NLS-1$
-			File modulefile = project.getLocation().append(MODULEFILE_NAME).toFile(); //$NON-NLS-1$
+			File metadataJSON = project.getLocation().append(METADATA_JSON_NAME).toFile(); //$NON-NLS-1$
 			submon.worked(20);
 
-			if(!modulefile.exists()) {
-				ModuleUtils.saveAsModulefile(metadata, modulefile);
-			}
+			if(!metadataJSON.exists())
+				forge.saveJSONMetadata(metadata, metadataJSON);
 			submon.worked(80);
 		}
 		else {
@@ -196,13 +182,12 @@ public class NewPuppetModuleProjectWizard extends Wizard implements INewWizard {
 						initializeProjectContents(monitor.newChild(80));
 						pptpHandler.ensureStateOfPuppetProjects(monitor.newChild(10));
 
-						IFile modulefile = ResourceUtil.getFile(project.getFullPath().append(MODULEFILE_NAME)); //$NON-NLS-1$
-						if(modulefile.exists()) {
-							NewModulefileWizard.ensureMetadataJSONExists(modulefile, monitor.newChild(1));
-							ResourceUtil.selectFile(modulefile);
+						IFile metadataJSON = ResourceUtil.getFile(project.getFullPath().append(METADATA_JSON_NAME)); //$NON-NLS-1$
+						if(metadataJSON.exists()) {
+							ResourceUtil.selectFile(metadataJSON);
 
 							try {
-								ResourceUtil.openEditor(modulefile);
+								ResourceUtil.openEditor(metadataJSON);
 							}
 							catch(PartInitException partInitException) {
 								MessageDialog.openError(

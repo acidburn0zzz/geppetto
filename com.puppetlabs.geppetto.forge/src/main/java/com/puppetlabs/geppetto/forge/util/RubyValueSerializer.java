@@ -87,4 +87,10 @@ public class RubyValueSerializer implements ValueSerializer {
 			serialize(out, value.toString());
 		}
 	}
+
+	@Override
+	public void serialize(Appendable out, Object value, int indent) throws IOException {
+		// Indent is ignored by this serializer
+		serialize(out, value, 0);
+	}
 }

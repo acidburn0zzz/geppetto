@@ -14,6 +14,9 @@ import static com.puppetlabs.geppetto.common.Strings.trimToNull;
 import static com.puppetlabs.geppetto.forge.Forge.MODULEFILE_NAME;
 import static org.eclipse.xtext.util.Strings.emptyIfNull;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.eclipse.core.resources.IFile;
 import org.eclipse.jface.layout.GridDataFactory;
 import org.eclipse.swt.SWT;
@@ -32,6 +35,7 @@ import org.eclipse.ui.forms.widgets.ExpandableComposite;
 import org.eclipse.ui.forms.widgets.FormToolkit;
 import org.eclipse.ui.forms.widgets.Section;
 
+import com.puppetlabs.geppetto.common.Strings;
 import com.puppetlabs.geppetto.forge.model.ModuleName;
 import com.puppetlabs.geppetto.ui.UIPlugin;
 
@@ -43,9 +47,11 @@ class ModuleOverviewPage extends GuardedModulePage {
 
 		protected Text projectPageText;
 
+		protected Text issuesURLText;
+
 		protected Text summaryText;
 
-		protected Text descriptionText;
+		protected Text tagsText;
 
 		protected DetailsSectionPart(Composite parent, FormToolkit toolkit) {
 			super(parent, toolkit, ExpandableComposite.TITLE_BAR | Section.DESCRIPTION);
@@ -86,6 +92,19 @@ class ModuleOverviewPage extends GuardedModulePage {
 
 			GridDataFactory.swtDefaults().align(SWT.FILL, SWT.CENTER).grab(true, false).applyTo(projectPageText);
 
+			toolkit.createLabel(client, UIPlugin.getLocalString("_UI_IssuesURL_label")); //$NON-NLS-1$
+
+			issuesURLText = toolkit.createText(client, null);
+			issuesURLText.addVerifyListener(defaultVerifier);
+			issuesURLText.addModifyListener(new GuardedModifyListener() {
+				@Override
+				public void handleEvent(ModifyEvent e) {
+					getModel().setIssuesURL(issuesURLText.getText());
+				}
+			});
+
+			GridDataFactory.swtDefaults().align(SWT.FILL, SWT.CENTER).grab(true, false).applyTo(issuesURLText);
+
 			toolkit.createLabel(client, UIPlugin.getLocalString("_UI_Summary_label")); //$NON-NLS-1$
 
 			summaryText = toolkit.createText(client, null);
@@ -99,18 +118,26 @@ class ModuleOverviewPage extends GuardedModulePage {
 
 			GridDataFactory.swtDefaults().align(SWT.FILL, SWT.CENTER).grab(true, false).applyTo(summaryText);
 
-			toolkit.createLabel(client, UIPlugin.getLocalString("_UI_Description_label")); //$NON-NLS-1$
+			toolkit.createLabel(client, UIPlugin.getLocalString("_UI_Tags_label")); //$NON-NLS-1$
 
-			descriptionText = toolkit.createText(client, null, SWT.MULTI | SWT.H_SCROLL | SWT.V_SCROLL);
-			descriptionText.addVerifyListener(defaultVerifier);
-			descriptionText.addModifyListener(new GuardedModifyListener() {
+			tagsText = toolkit.createText(client, null);
+			tagsText.addVerifyListener(defaultVerifier);
+			tagsText.addModifyListener(new GuardedModifyListener() {
 				@Override
 				public void handleEvent(ModifyEvent e) {
-					getModel().setDescription(descriptionText.getText());
+					String[] tags = tagsText.getText().split("\\s|,");
+					List<String> tagsList = new ArrayList<String>(tags.length);
+					for(int idx = 0; idx < tags.length; ++idx) {
+						String tag = tags[idx].trim();
+						if(tag.length() > 0)
+							tagsList.add(tag);
+					}
+					getModel().setTags(tagsList);
 				}
 			});
 
-			GridDataFactory.swtDefaults().align(SWT.FILL, SWT.FILL).grab(true, true).applyTo(descriptionText);
+			GridDataFactory.swtDefaults().align(SWT.FILL, SWT.CENTER).grab(true, false).applyTo(tagsText);
+
 			toolkit.paintBordersFor(client);
 			section.setClient(client);
 		}
@@ -124,8 +151,9 @@ class ModuleOverviewPage extends GuardedModulePage {
 				MetadataModel metadata = getModel();
 				sourceText.setText(metadata.getSource());
 				projectPageText.setText(metadata.getProjectPage());
+				issuesURLText.setText(metadata.getIssuesURL());
 				summaryText.setText(metadata.getSummary());
-				descriptionText.setText(metadata.getDescription());
+				tagsText.setText(Strings.concat(metadata.getTags(), ' '));
 				super.refresh();
 			}
 			finally {
@@ -239,6 +267,7 @@ class ModuleOverviewPage extends GuardedModulePage {
 				}
 			});
 			textGDFactory.applyTo(licenseText);
+
 			toolkit.paintBordersFor(client);
 			section.setClient(client);
 		}
