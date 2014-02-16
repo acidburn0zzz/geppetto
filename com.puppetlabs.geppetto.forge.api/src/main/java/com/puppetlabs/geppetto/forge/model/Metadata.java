@@ -24,19 +24,6 @@ import com.puppetlabs.geppetto.semver.Version;
  */
 public class Metadata extends Entity {
 
-	private static List<Type> copyTypes(List<Type> types) {
-		if(types != null) {
-			int top = types.size();
-			if(top > 0) {
-				List<Type> copy = new ArrayList<Type>(types.size());
-				for(Type type : types)
-					copy.add(new Type(type));
-				return copy;
-			}
-		}
-		return Collections.emptyList();
-	}
-
 	private static String nullToEmpty(String s) {
 		if(s == null)
 			s = "";
@@ -76,6 +63,12 @@ public class Metadata extends Entity {
 	private List<Type> types;
 
 	@Expose
+	private List<Requirement> requirements;
+
+	@Expose
+	private List<SupportedOS> operatingsystem_support;
+
+	@Expose
 	private Version version;
 
 	private transient Map<String, Object> dynamicAttributes;
@@ -103,17 +96,26 @@ public class Metadata extends Entity {
 		project_page = nullToEmpty(src.project_page);
 		license = nullToEmpty(src.license);
 
-		if(src.dependencies == null || src.dependencies.isEmpty())
-			dependencies = Collections.emptyList();
-		else
-			dependencies = new ArrayList<Dependency>(src.dependencies);
+		dependencies = new ArrayList<Dependency>();
+		if(src.dependencies != null)
+			dependencies.addAll(src.dependencies);
 
-		types = copyTypes(src.types);
+		operatingsystem_support = new ArrayList<SupportedOS>();
+		if(src.operatingsystem_support != null)
+			operatingsystem_support.addAll(src.operatingsystem_support);
 
-		if(src.checksums == null || src.checksums.isEmpty())
-			checksums = Collections.emptyMap();
-		else
-			checksums = new HashMap<String, byte[]>(src.checksums);
+		requirements = new ArrayList<Requirement>();
+		if(src.requirements != null)
+			requirements.addAll(src.requirements);
+
+		types = new ArrayList<Type>();
+		if(src.types != null)
+			for(Type type : src.types)
+				types.add(new Type(type));
+
+		checksums = new HashMap<String, byte[]>();
+		if(src.checksums != null)
+			checksums.putAll(src.checksums);
 	}
 
 	/**
@@ -199,12 +201,30 @@ public class Metadata extends Entity {
 	}
 
 	/**
+	 * @return the list of supported operating systems
+	 */
+	public List<SupportedOS> getOperatingSystemSupport() {
+		if(operatingsystem_support == null)
+			operatingsystem_support = new ArrayList<SupportedOS>();
+		return operatingsystem_support;
+	}
+
+	/**
 	 * A URL that points to the project page for this module.
 	 * 
 	 * @return the project_page
 	 */
 	public String getProjectPage() {
 		return project_page;
+	}
+
+	/**
+	 * @return the requirements
+	 */
+	public List<Requirement> getRequirements() {
+		if(requirements == null)
+			requirements = new ArrayList<Requirement>();
+		return requirements;
 	}
 
 	/**
@@ -294,11 +314,27 @@ public class Metadata extends Entity {
 	}
 
 	/**
+	 * @param operatingSystemSupport
+	 *            the list of supported operating systems to set
+	 */
+	public void setOperatingSystemSupport(List<SupportedOS> operatingSystemSupport) {
+		this.operatingsystem_support = operatingSystemSupport;
+	}
+
+	/**
 	 * @param project_page
 	 *            the project_page to set
 	 */
 	public void setProjectPage(String project_page) {
 		this.project_page = project_page;
+	}
+
+	/**
+	 * @param requirements
+	 *            the requirements to set
+	 */
+	public void setRequirements(List<Requirement> requirements) {
+		this.requirements = requirements;
 	}
 
 	/**

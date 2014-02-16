@@ -19,14 +19,10 @@ import com.google.gson.annotations.Expose;
 /**
  */
 public class Type extends NamedTypeItem {
-	private static List<NamedTypeItem> copyList(List<NamedTypeItem> nti) {
-		if(nti != null) {
-			int top = nti.size();
-			if(top > 0) {
-				return new ArrayList<NamedTypeItem>(nti);
-			}
-		}
-		return Collections.emptyList();
+	private static List<NamedTypeItem> ensureList(List<NamedTypeItem> nti) {
+		return nti == null
+				? Collections.<NamedTypeItem> emptyList()
+				: nti;
 	}
 
 	@Expose
@@ -44,9 +40,9 @@ public class Type extends NamedTypeItem {
 	Type(Type src) {
 		setName(src.getName());
 		setDocumentation(src.getDocumentation());
-		properties = copyList(src.properties);
-		parameters = copyList(src.parameters);
-		providers = copyList(src.providers);
+		properties = ensureList(src.properties);
+		parameters = ensureList(src.parameters);
+		providers = ensureList(src.providers);
 	}
 
 	@Override
